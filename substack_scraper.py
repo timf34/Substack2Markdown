@@ -4,11 +4,37 @@ from bs4 import BeautifulSoup
 import html2text
 import requests
 from typing import Any, Dict, List, Optional, Tuple
+from xml.etree import ElementTree as ET
 
 
 class SubstackScraper:
-    def __init__(self, post_url: str):
-        self.post_url = post_url
+    def __init__(self, base_url: str):
+        self.base_url = base_url
+        self.keywords: List[str] = ["about", "archive", "podcast"]  # Keywords to filter out unwanted URLs
+
+    def get_all_posts(self):
+        """
+        This method reads the sitemap.xml file and returns a list of all the URLs in the file
+        """
+        sitemap_url = f"{self.base_url}sitemap.xml"
+        response = requests.get(sitemap_url)
+
+        # Check if request was successful
+        if response.status_code == 200:
+            root = ET.fromstring(response.content)
+            urls = [element.text for element in root.iter('{http://www.sitemaps.org/schemas/sitemap/0.9}loc')]
+            urls = self.filter_urls(urls, self.keywords)
+            return urls
+        else:
+            print(f'Error fetching sitemap: {response.status_code}')
+            return []
+
+    @staticmethod
+    def filter_urls(urls: List[str], keywords: List[str]):
+        """
+        This method filters out URLs that contain certain keywords
+        """
+        return [url for url in urls if all(keyword not in url for keyword in keywords)]
 
     @staticmethod
     def _substack_reader(soup: BeautifulSoup) -> Tuple[str, Dict[str, str]]:
@@ -34,8 +60,9 @@ class SubstackScraper:
             raise ValueError(f"Error fetching page: {e}") from e
 
 def main():
-    scraper = SubstackScraper('https://ava.substack.com/making-and-keeping-friends')
-    scraper.extract_post_content('https://ava.substack.com/making-and-keeping-friends')
+    scraper = SubstackScraper('https://ava.substack.com/')
+    print(scraper.get_all_posts())
+    # scraper.extract_post_content('https://ava.substack.com/making-and-keeping-friends')
 
 
 if __name__ == "__main__":
