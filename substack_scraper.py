@@ -9,6 +9,7 @@ from tqdm import tqdm
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from webdriver_manager.microsoft import EdgeChromiumDriverManager
+from selenium.webdriver.edge.options import Options as EdgeOptions
 from time import sleep
 
 class SubstackScraper:
@@ -71,9 +72,14 @@ class SubstackScraper:
 # This can inherit from SubstackScraper down the line, but just keep it separate for now
 # Try log in using selenium and then scrape the premium content
 class PremiumSubstackScraper(SubstackScraper):
-    def __init__(self, base_url: str):
+    def __init__(self, base_url: str, headless: bool = False):
         super().__init__(base_url)
-        self.driver = webdriver.Edge(EdgeChromiumDriverManager().install())
+
+        options = EdgeOptions()
+        if headless:
+            options.add_argument("--headless")
+
+        self.driver = webdriver.Edge(EdgeChromiumDriverManager().install(), options=options)
         self.login()
         self.post_urls: List[str] = self.get_all_post_urls()
 
@@ -125,13 +131,11 @@ class PremiumSubstackScraper(SubstackScraper):
             except Exception as e:
                 print(f"Error fetching or saving page: {e}")
             count += 1
-            if count > 5:
-                self.driver.quit()
-                break  # Just for testing purposes
+
 
 
 def main():
-    premium_substack_scraper = PremiumSubstackScraper("https://ava.substack.com/")
+    premium_substack_scraper = PremiumSubstackScraper("https://ava.substack.com/", headless=True)
     premium_substack_scraper.save_posts_as_html("data/ava")
 
 
