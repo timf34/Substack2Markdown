@@ -101,6 +101,34 @@ class BaseSubstackScraper:
 
         return url.split("/")[-1] + filetype
 
+    @staticmethod
+    def combine_metadata_and_content(title: str, subtitle: str, content) -> str:
+        """
+        Combines the title, subtitle, and content into a single string with Markdown format
+        """
+        if not isinstance(title, str):
+            raise ValueError("title must be a string")
+
+        if not isinstance(content, str):
+            raise ValueError("content must be a string")
+
+        metadata = f"# {title}\n\n"  # Add title
+        if subtitle:
+            metadata += f"## {subtitle}\n\n"  # Add subtitle
+
+        return metadata + content
+
+    def soup_to_md(self, soup: BeautifulSoup) -> str:
+        """
+        Converts substack post soup to markdown
+        """
+        title = soup.select_one("h1.post-title").text.strip()
+        subtitle_element = soup.select_one("h3.subtitle")
+        subtitle = subtitle_element.text.strip() if subtitle_element else ""
+        content = str(soup.select_one("div.available-content"))
+        content = self.html_to_md(content)
+        return self.combine_metadata_and_content(title, subtitle, content)
+
     def get_post_content(self, url: str) -> str:
         raise NotImplementedError
 
@@ -114,8 +142,8 @@ class BaseSubstackScraper:
                 filename = self.get_filename_from_url(url, filetype=".md")
                 filepath = os.path.join(self.save_dir, filename)
                 if not os.path.exists(filepath):
-                    content = self.get_post_content(url)
-                    md = self.html_to_md(content)
+                    soup = self.get_url_soup(url)
+                    md = self.soup_to_md(soup)
                     self.save_to_file(filepath, md)
                 else:
                     print(f"File already exists: {filepath}")
@@ -129,15 +157,13 @@ class SubstackScraper(BaseSubstackScraper):
     def __init__(self, base_substack_url: str, savdir: str):
         super().__init__(base_substack_url, savdir)
 
-    def get_post_content(self, url: str) -> str:
+    def get_url_soup(self, url: str) -> BeautifulSoup:
         """
-        Gets post content using requests and soup and returns it as a string
+        Gets soup from URL using requests
         """
         try:
             page = requests.get(url, headers=None)
-            soup = BeautifulSoup(page.content, "html.parser")
-            content = str(soup.select_one("div.available-content"))
-            return content
+            return  BeautifulSoup(page.content, "html.parser")
         except Exception as e:
             raise ValueError(f"Error fetching page: {e}") from e
 
@@ -177,16 +203,14 @@ class PremiumSubstackScraper(BaseSubstackScraper):
         submit.click()
         sleep(5) # Wait for the page to load
 
-    def get_post_content(self, url: str) -> str:
+    def get_url_soup(self, url: str) -> BeautifulSoup:
         # sourcery skip: inline-immediately-returned-variable
         """
-        Gets post content using requests and soup and returns it as a string
+        Gets soup from URL using logged in selenium driver
         """
         try:
             self.driver.get(url)
-            soup = BeautifulSoup(self.driver.page_source, "html.parser")
-            content = str(soup.select_one("div.available-content"))
-            return content
+            return BeautifulSoup(self.driver.page_source, "html.parser")
         except Exception as e:
             raise ValueError(f"Error fetching page: {e}") from e
 
