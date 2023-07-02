@@ -1,3 +1,4 @@
+import argparse
 import os
 from abc import ABC, abstractmethod
 from typing import List
@@ -139,7 +140,8 @@ class BaseSubstackScraper(ABC):
         Iterates over all posts and saves them as markdown files
         """
         count = 0
-        for url in tqdm(self.post_urls):
+        total = only_scrape_n_posts if only_scrape_n_posts != 0 else len(self.post_urls)
+        for url in tqdm(self.post_urls, total=total):
             try:
                 filename = self.get_filename_from_url(url, filetype=".md")
                 filepath = os.path.join(self.save_dir, filename)
@@ -218,9 +220,36 @@ class PremiumSubstackScraper(BaseSubstackScraper):
             raise ValueError(f"Error fetching page: {e}") from e
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description='Scrape a Substack site.')
+    parser.add_argument('-u', '--url', type=str, required=True,
+                        help='The base URL of the Substack site to scrape.')
+    parser.add_argument('-d', '--directory', type=str, required=True,
+                        help='The directory to save scraped posts.')
+    parser.add_argument('-n', '--number', type=int, default=0,
+                        help='The number of posts to scrape. If 0 or not provided, all posts will be scraped.')
+    parser.add_argument('-p', '--premium', action='store_true',
+                        help='Use the Premium Substack Scraper with selenium.')
+    parser.add_argument('--headless', action='store_true',
+                        help='Run browser in headless mode when using the Premium Substack Scraper.')
+
+    return parser.parse_args()
+
+
+# def main():
+#     premium_scraper = PremiumSubstackScraper(base_substack_url="https://ava.substack.com/", savdir="data/ava_test")
+#     premium_scraper.scrape_all_posts(only_scrape_n_posts=5)
+
+
 def main():
-    premium_scraper = PremiumSubstackScraper(base_substack_url="https://ava.substack.com/", savdir="data/ava_test")
-    premium_scraper.scrape_all_posts(only_scrape_n_posts=5)
+    args = parse_args()
+
+    if args.premium:
+        scraper = PremiumSubstackScraper(args.url, args.directory, headless=args.headless)
+    else:
+        scraper = SubstackScraper(args.url, args.directory)
+
+    scraper.scrape_all_posts(args.number)
 
 
 if __name__ == "__main__":
