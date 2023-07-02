@@ -1,5 +1,6 @@
 import os
-from typing import Dict, List, Tuple
+from abc import ABC, abstractmethod
+from typing import List
 from time import sleep
 
 from bs4 import BeautifulSoup
@@ -18,7 +19,7 @@ from config import EMAIL, PASSWORD
 # TODO: Create the savdir based on the name of the author unless specified otherwise
 
 
-class BaseSubstackScraper:
+class BaseSubstackScraper(ABC):
     def __init__(self, base_substack_url: str, savdir: str):
         if not base_substack_url.endswith("/"):
             base_substack_url += "/"
@@ -129,6 +130,7 @@ class BaseSubstackScraper:
         content = self.html_to_md(content)
         return self.combine_metadata_and_content(title, subtitle, content)
 
+    @abstractmethod
     def get_url_soup(self, url: str) -> str:
         raise NotImplementedError
 
