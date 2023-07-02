@@ -13,6 +13,8 @@ from selenium.webdriver.common.by import By
 from webdriver_manager.microsoft import EdgeChromiumDriverManager
 from selenium.webdriver.edge.options import Options as EdgeOptions
 
+from config import EMAIL, PASSWORD
+
 # TODO: Create the savdir based on the name of the author unless specified otherwise
 
 
@@ -167,8 +169,8 @@ class PremiumSubstackScraper(BaseSubstackScraper):
         # Email and password
         email = self.driver.find_element(By.NAME, "email")
         password = self.driver.find_element(By.NAME, "password")
-        email.send_keys("farrelti@tcd.ie")
-        password.send_keys("shopkeeper2")
+        email.send_keys(EMAIL)
+        password.send_keys(PASSWORD)
 
         # Find the submit button and click it.
         submit = self.driver.find_element(By.XPATH, "//*[@id=\"substack-login\"]/div[2]/div[2]/form/div[3]/button")
