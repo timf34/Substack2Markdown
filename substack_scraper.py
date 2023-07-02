@@ -113,9 +113,9 @@ class BaseSubstackScraper(ABC):
         if not isinstance(content, str):
             raise ValueError("content must be a string")
 
-        metadata = f"# {title}\n\n"  # Add title
+        metadata = f"# {title}\n\n"
         if subtitle:
-            metadata += f"## {subtitle}\n\n"  # Add subtitle
+            metadata += f"## {subtitle}\n\n"
 
         return metadata + content
 
