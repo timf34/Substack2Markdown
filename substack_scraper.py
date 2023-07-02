@@ -129,7 +129,7 @@ class BaseSubstackScraper:
         content = self.html_to_md(content)
         return self.combine_metadata_and_content(title, subtitle, content)
 
-    def get_post_content(self, url: str) -> str:
+    def get_url_soup(self, url: str) -> str:
         raise NotImplementedError
 
     def scrape_all_posts(self, only_scrape_n_posts: int= 0) -> None:
@@ -152,6 +152,7 @@ class BaseSubstackScraper:
             count+= 1
             if only_scrape_n_posts != 0 and count == only_scrape_n_posts:
                 break
+
 
 class SubstackScraper(BaseSubstackScraper):
     def __init__(self, base_substack_url: str, savdir: str):
