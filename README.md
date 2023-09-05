@@ -7,6 +7,7 @@ as Pocket) don't save these posts, but with this script you can!
 ## TODO
 
 - [ ] Add `requirements.txt` file!
+- [ ] Build CLI interface/ make pip installable for easier usage
 
 ## Installation
 
