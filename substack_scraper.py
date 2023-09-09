@@ -168,8 +168,8 @@ class BaseSubstackScraper(ABC):
 
 
 class SubstackScraper(BaseSubstackScraper):
-    def __init__(self, base_substack_url: str, savdir: str):
-        super().__init__(base_substack_url, savdir)
+    def __init__(self, base_substack_url: str):
+        super().__init__(base_substack_url)
 
     def get_url_soup(self, url: str) -> BeautifulSoup:
         """
@@ -245,23 +245,23 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main():
-    premium_scraper = PremiumSubstackScraper(
-        base_substack_url="https://ava.substack.com/",
-        headless=False
-    )
-    premium_scraper.scrape_posts(num_posts_to_scrape=2)
-
-
 # def main():
-#     args = parse_args()
-#
-#     if args.premium:
-#         scraper = PremiumSubstackScraper(args.url, args.directory, headless=args.headless)
-#     else:
-#         scraper = SubstackScraper(args.url, args.directory)
-#
-#     scraper.scrape_posts(args.number)
+#     premium_scraper = PremiumSubstackScraper(
+#         base_substack_url="https://ava.substack.com/",
+#         headless=False
+#     )
+#     premium_scraper.scrape_posts(num_posts_to_scrape=4)
+
+
+def main():
+    args = parse_args()
+
+    if args.premium:
+        scraper = PremiumSubstackScraper(args.url, headless=args.headless)
+    else:
+        scraper = SubstackScraper(args.url)
+
+    scraper.scrape_posts(args.number)
 
 
 if __name__ == "__main__":
