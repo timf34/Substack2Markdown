@@ -14,17 +14,26 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from webdriver_manager.microsoft import EdgeChromiumDriverManager
 from selenium.webdriver.edge.options import Options as EdgeOptions
+from urllib.parse import urlparse
 
 from config import EMAIL, PASSWORD
 
-# TODO: Create the savdir based on the name of the author unless specified otherwise
+
+def extract_main_part(url: str) -> str:
+    # Parse the URL to get the netloc, and split on '.'
+    parts = urlparse(url).netloc.split('.')
+    # Return the main part of the domain, while ignoring 'www' if present
+    return parts[1] if parts[0] == 'www' else parts[0]
 
 
 class BaseSubstackScraper(ABC):
-    def __init__(self, base_substack_url: str, savdir: str):
+    def __init__(self, base_substack_url: str):
         if not base_substack_url.endswith("/"):
             base_substack_url += "/"
         self.base_substack_url: str = base_substack_url
+
+        url_base: str = extract_main_part(base_substack_url)
+        savdir: str = f"data/{url_base}"
 
         # Check if the save_dir exists
         if not os.path.exists(savdir):
@@ -135,12 +144,12 @@ class BaseSubstackScraper(ABC):
     def get_url_soup(self, url: str) -> str:
         raise NotImplementedError
 
-    def scrape_all_posts(self, only_scrape_n_posts: int= 0) -> None:
+    def scrape_posts(self, num_posts_to_scrape: int= 0) -> None:
         """
         Iterates over all posts and saves them as markdown files
         """
         count = 0
-        total = only_scrape_n_posts if only_scrape_n_posts != 0 else len(self.post_urls)
+        total = num_posts_to_scrape if num_posts_to_scrape != 0 else len(self.post_urls)
         for url in tqdm(self.post_urls, total=total):
             try:
                 filename = self.get_filename_from_url(url, filetype=".md")
@@ -154,7 +163,7 @@ class BaseSubstackScraper(ABC):
             except Exception as e:
                 print(f"Error scraping post: {e}")
             count+= 1
-            if only_scrape_n_posts != 0 and count == only_scrape_n_posts:
+            if num_posts_to_scrape != 0 and count == num_posts_to_scrape:
                 break
 
 
@@ -174,8 +183,8 @@ class SubstackScraper(BaseSubstackScraper):
 
 
 class PremiumSubstackScraper(BaseSubstackScraper):
-    def __init__(self, base_substack_url: str, savdir: str, headless: bool = False):
-        super().__init__(base_substack_url, savdir)
+    def __init__(self, base_substack_url: str, headless: bool = False):
+        super().__init__(base_substack_url)
 
         options = EdgeOptions()
         if headless:
@@ -204,7 +213,7 @@ class PremiumSubstackScraper(BaseSubstackScraper):
         password.send_keys(PASSWORD)
 
         # Find the submit button and click it.
-        submit = self.driver.find_element(By.XPATH, "//*[@id=\"substack-login\"]/div[2]/div[2]/form/div[3]/button")
+        submit = self.driver.find_element(By.XPATH, "//*[@id=\"substack-login\"]/div[2]/div[2]/form/button")
         submit.click()
         sleep(5) # Wait for the page to load
 
@@ -236,20 +245,23 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-# def main():
-#     premium_scraper = PremiumSubstackScraper(base_substack_url="https://ava.substack.com/", savdir="data/ava_test")
-#     premium_scraper.scrape_all_posts(only_scrape_n_posts=5)
-
-
 def main():
-    args = parse_args()
+    premium_scraper = PremiumSubstackScraper(
+        base_substack_url="https://ava.substack.com/",
+        headless=False
+    )
+    premium_scraper.scrape_posts(num_posts_to_scrape=2)
 
-    if args.premium:
-        scraper = PremiumSubstackScraper(args.url, args.directory, headless=args.headless)
-    else:
-        scraper = SubstackScraper(args.url, args.directory)
 
-    scraper.scrape_all_posts(args.number)
+# def main():
+#     args = parse_args()
+#
+#     if args.premium:
+#         scraper = PremiumSubstackScraper(args.url, args.directory, headless=args.headless)
+#     else:
+#         scraper = SubstackScraper(args.url, args.directory)
+#
+#     scraper.scrape_posts(args.number)
 
 
 if __name__ == "__main__":
