@@ -1,4 +1,4 @@
-﻿# PremiumSubstackScraper
+﻿# SubstackScraper
 
 Premium Substack Scraper is a Python tool for scraping free and premium Substack posts and saving them as Markdown 
 files. It will save paid for content as long as you're subscribed to that substack. Most "save for later" apps (such 
