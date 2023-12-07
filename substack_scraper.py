@@ -14,6 +14,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from webdriver_manager.microsoft import EdgeChromiumDriverManager
 from selenium.webdriver.edge.options import Options as EdgeOptions
+from selenium.webdriver.chrome.service import Service
 from urllib.parse import urlparse
 
 from config import EMAIL, PASSWORD
@@ -190,7 +191,8 @@ class PremiumSubstackScraper(BaseSubstackScraper):
         if headless:
             options.add_argument("--headless")
 
-        self.driver = webdriver.Edge(EdgeChromiumDriverManager().install(), options=options)
+        service = Service(EdgeChromiumDriverManager().install())
+        self.driver = webdriver.Edge(service=service, options=options)
         self.login()
 
     def login(self) -> None:   # sourcery skip: extract-duplicate-method
@@ -245,23 +247,23 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-# def main():
-#     premium_scraper = PremiumSubstackScraper(
-#         base_substack_url="https://ava.substack.com/",
-#         headless=False
-#     )
-#     premium_scraper.scrape_posts(num_posts_to_scrape=4)
-
-
 def main():
-    args = parse_args()
+    premium_scraper = PremiumSubstackScraper(
+        base_substack_url="https://rabbitroompoetry.substack.com/",
+        headless=False
+    )
+    premium_scraper.scrape_posts()
 
-    if args.premium:
-        scraper = PremiumSubstackScraper(args.url, headless=args.headless)
-    else:
-        scraper = SubstackScraper(args.url)
-
-    scraper.scrape_posts(args.number)
+#
+# def main():
+#     args = parse_args()
+#
+#     if args.premium:
+#         scraper = PremiumSubstackScraper(args.url, headless=args.headless)
+#     else:
+#         scraper = SubstackScraper(args.url)
+#
+#     scraper.scrape_posts(args.number)
 
 
 if __name__ == "__main__":
