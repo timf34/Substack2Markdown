@@ -1,0 +1,6 @@
+bs4==0.0.1
+html2text==2020.1.16
+requests==2.31.0
+selenium==4.16.0
+tqdm==4.66.1
+webdriver_manager==4.0.1
