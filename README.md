@@ -6,6 +6,7 @@ as Pocket) don't save these posts, but with this script you can!
 
 ## TODO
 
+- [ ] Write instructions for using with venv & ensure requirments.txt is good
 - [ ] Build CLI interface/ make pip installable for easier usage
 
 ## Installation
