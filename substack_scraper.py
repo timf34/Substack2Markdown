@@ -28,13 +28,16 @@ def extract_main_part(url: str) -> str:
 
 
 class BaseSubstackScraper(ABC):
+
+    BASE_DIR_NAME: str = "substack_md_files"
+
     def __init__(self, base_substack_url: str):
         if not base_substack_url.endswith("/"):
             base_substack_url += "/"
         self.base_substack_url: str = base_substack_url
 
         url_base: str = extract_main_part(base_substack_url)
-        savdir: str = f"data/{url_base}"
+        savdir: str = f"{self.BASE_DIR_NAME}/{url_base}"
 
         # Check if the save_dir exists
         if not os.path.exists(savdir):
@@ -248,11 +251,10 @@ def parse_args() -> argparse.Namespace:
 
 
 def main():
-    premium_scraper = PremiumSubstackScraper(
-        base_substack_url="https://rabbitroompoetry.substack.com/",
-        headless=False
+    premium_scraper = SubstackScraper(
+        base_substack_url="https://www.henrikkarlsson.xyz/",
     )
-    premium_scraper.scrape_posts()
+    premium_scraper.scrape_posts(num_posts_to_scrape=10)
 
 #
 # def main():
