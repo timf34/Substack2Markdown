@@ -31,18 +31,18 @@ def extract_main_part(url: str) -> str:
 
 
 class BaseSubstackScraper(ABC):
-    def __init__(self, base_substack_url: str, savdir: str):
+    def __init__(self, base_substack_url: str, save_dir: str):
         if not base_substack_url.endswith("/"):
             base_substack_url += "/"
         self.base_substack_url: str = base_substack_url
 
         url_base: str = extract_main_part(base_substack_url)
-        savdir: str = f"{savdir}/{url_base}"
+        save_dir: str = f"{save_dir}/{url_base}"
 
-        if not os.path.exists(savdir):
-            os.makedirs(savdir)
-            print(f"Created directory {savdir}")
-        self.save_dir: str = savdir
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+            print(f"Created directory {save_dir}")
+        self.save_dir: str = save_dir
         self.keywords: List[str] = ["about", "archive", "podcast"]
         self.post_urls: List[str] = self.get_all_post_urls()
 
@@ -174,8 +174,8 @@ class BaseSubstackScraper(ABC):
 
 
 class SubstackScraper(BaseSubstackScraper):
-    def __init__(self, base_substack_url: str, savdir: str):
-        super().__init__(base_substack_url, savdir)
+    def __init__(self, base_substack_url: str, save_dir: str):
+        super().__init__(base_substack_url, save_dir)
 
     def get_url_soup(self, url: str) -> Optional[BeautifulSoup]:
         """
@@ -193,8 +193,8 @@ class SubstackScraper(BaseSubstackScraper):
 
 
 class PremiumSubstackScraper(BaseSubstackScraper):
-    def __init__(self, base_substack_url: str, savdir: str, headless: bool = False):
-        super().__init__(base_substack_url, savdir)
+    def __init__(self, base_substack_url: str, save_dir: str, headless: bool = False):
+        super().__init__(base_substack_url, save_dir)
 
         options = EdgeOptions()
         if headless:
@@ -263,13 +263,13 @@ def main():
 
     if args.url:
         if args.premium:
-            scraper = PremiumSubstackScraper(args.url, headless=args.headless, savdir=args.directory)
+            scraper = PremiumSubstackScraper(args.url, headless=args.headless, save_dir=args.directory)
         else:
-            scraper = SubstackScraper(args.url, savdir=args.directory)
+            scraper = SubstackScraper(args.url, save_dir=args.directory)
         scraper.scrape_posts(args.number)
 
     else:  # Use the hardcoded values at the top of the file
-        scraper = SubstackScraper(base_substack_url=BASE_SUBSTACK_URL, savdir=args.directory)
+        scraper = SubstackScraper(base_substack_url=BASE_SUBSTACK_URL, save_dir=args.directory)
         scraper.scrape_posts(num_posts_to_scrape=NUM_POSTS_TO_SCRAPE)
 
 
