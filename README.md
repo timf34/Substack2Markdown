@@ -5,7 +5,9 @@ files. It will save paid for content as long as you're subscribed to that substa
 as Pocket) don't save these posts, but with this script you can!
 
 Once you run the script, it will create a folder named after the substack in the directory you have specified,
-and then begin to scrape the substack URL, converting the blog posts into markdown files.
+and then begin to scrape the substack URL, converting the blog posts into markdown files. You can either hardcode the 
+substack URL and the number of posts you'd like to save into the top of the file, or specify them as command line
+arguments.
 
 ## Installation
 
