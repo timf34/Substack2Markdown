@@ -228,6 +228,17 @@ class PremiumSubstackScraper(BaseSubstackScraper):
         submit.click()
         sleep(5)  # Wait for the page to load
 
+        if self.is_login_failed():
+            raise("Warning: Login unsuccessful. Please check your email and password, or your account status.\n"
+                  "Use the non-premium scraper for the non-paid posts.")
+
+    def is_login_failed(self) -> bool:
+        """
+        Check for the presence of the 'error-container' to indicate a failed login attempt.
+        """
+        error_container = self.driver.find_elements(By.ID, 'error-container')
+        return len(error_container) > 0 and error_container[0].is_displayed()
+
     def get_url_soup(self, url: str) -> BeautifulSoup:
         """
         Gets soup from URL using logged in selenium driver
@@ -270,7 +281,7 @@ def main():
         scraper.scrape_posts(args.number)
 
     else:  # Use the hardcoded values at the top of the file
-        scraper = SubstackScraper(base_substack_url=BASE_SUBSTACK_URL, save_dir=args.directory)
+        scraper = PremiumSubstackScraper(base_substack_url=BASE_SUBSTACK_URL, save_dir=args.directory)
         scraper.scrape_posts(num_posts_to_scrape=NUM_POSTS_TO_SCRAPE)
 
 
