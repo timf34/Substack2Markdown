@@ -1,7 +1,7 @@
 import argparse
 import os
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Optional
 from time import sleep
 
 from bs4 import BeautifulSoup
@@ -168,7 +168,7 @@ class BaseSubstackScraper(ABC):
                     print(f"File already exists: {filepath}")
             except Exception as e:
                 print(f"Error scraping post: {e}")
-            count+= 1
+            count += 1
             if num_posts_to_scrape != 0 and count == num_posts_to_scrape:
                 break
 
@@ -177,7 +177,7 @@ class SubstackScraper(BaseSubstackScraper):
     def __init__(self, base_substack_url: str):
         super().__init__(base_substack_url)
 
-    def get_url_soup(self, url: str) -> BeautifulSoup:
+    def get_url_soup(self, url: str) -> Optional[BeautifulSoup]:
         """
         Gets soup from URL using requests
         """
@@ -264,7 +264,7 @@ def main():
         else:
             scraper = SubstackScraper(args.url)
         scraper.scrape_posts(args.number)
-    else:
+    else:  # Use the hardcoded values at the top of the file
         scraper = SubstackScraper(base_substack_url=BASE_SUBSTACK_URL)
         scraper.scrape_posts(num_posts_to_scrape=NUM_POSTS_TO_SCRAPE)
 
