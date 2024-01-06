@@ -204,7 +204,7 @@ class PremiumSubstackScraper(BaseSubstackScraper):
         self.driver = webdriver.Edge(service=service, options=options)
         self.login()
 
-    def login(self) -> None:   # sourcery skip: extract-duplicate-method
+    def login(self) -> None:
         """
         This method logs into Substack using Selenium
         """
@@ -248,9 +248,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('-n', '--number', type=int, default=0,
                         help='The number of posts to scrape. If 0 or not provided, all posts will be scraped.')
     parser.add_argument('-p', '--premium', action='store_true',
-                        help='Use the Premium Substack Scraper with selenium.')
-    parser.add_argument('--headless', action='store_true',
-                        help='Run browser in headless mode when using the Premium Substack Scraper.')
+                        help='Include -p in command to use the Premium Substack Scraper with selenium.')
+    parser.add_argument('h', '--headless', action='store_true',
+                        help='Include -h in command to run browser in headless mode when using the Premium Substack '
+                             'Scraper.')
 
     return parser.parse_args()
 
