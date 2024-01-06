@@ -249,7 +249,7 @@ def parse_args() -> argparse.Namespace:
                         help='The number of posts to scrape. If 0 or not provided, all posts will be scraped.')
     parser.add_argument('-p', '--premium', action='store_true',
                         help='Include -p in command to use the Premium Substack Scraper with selenium.')
-    parser.add_argument('h', '--headless', action='store_true',
+    parser.add_argument('--headless', action='store_true',
                         help='Include -h in command to run browser in headless mode when using the Premium Substack '
                              'Scraper.')
 
