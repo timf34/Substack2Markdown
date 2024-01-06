@@ -6,7 +6,7 @@ as Pocket) don't save these posts, but with this script you can!
 
 ## TODO
 
-- [ ] Add `requirements.txt` file!
+- [ ] Write instructions for using with venv & ensure requirments.txt is good
 - [ ] Build CLI interface/ make pip installable for easier usage
 
 ## Installation
@@ -50,3 +50,8 @@ To scrape a specific number of posts:
 ```bash
 python substack_scraper.py --url https://example.substack.com --directory /path/to/save/posts --number 5
 ```
+
+## How it works 
+
+Once you run the script, it will create a folder named after the substack in the directory you have specified,
+and then begin to scrape the substack URL, converting the blog posts into markdown files.
