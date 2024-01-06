@@ -148,7 +148,7 @@ class BaseSubstackScraper(ABC):
     def get_url_soup(self, url: str) -> str:
         raise NotImplementedError
 
-    def scrape_posts(self, num_posts_to_scrape: int= 0) -> None:
+    def scrape_posts(self, num_posts_to_scrape: int = 0) -> None:
         """
         Iterates over all posts and saves them as markdown files
         """
@@ -160,6 +160,9 @@ class BaseSubstackScraper(ABC):
                 filepath = os.path.join(self.save_dir, filename)
                 if not os.path.exists(filepath):
                     soup = self.get_url_soup(url)
+                    if soup is None:
+                        total += 1
+                        continue
                     md = self.soup_to_md(soup)
                     self.save_to_file(filepath, md)
                 else:
@@ -181,7 +184,11 @@ class SubstackScraper(BaseSubstackScraper):
         """
         try:
             page = requests.get(url, headers=None)
-            return  BeautifulSoup(page.content, "html.parser")
+            soup = BeautifulSoup(page.content, "html.parser")
+            if soup.find("h2", class_="paywall-title"):
+                print(f"Skipping premium article: {url}")
+                return None
+            return soup
         except Exception as e:
             raise ValueError(f"Error fetching page: {e}") from e
 
