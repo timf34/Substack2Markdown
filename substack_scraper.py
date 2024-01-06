@@ -19,27 +19,26 @@ from urllib.parse import urlparse
 
 from config import EMAIL, PASSWORD
 
+BASE_SUBSTACK_URL: str = "https://www.henrikkarlsson.xyz/"  # Substack you want to convert to markdown
+BASE_DIR_NAME: str = "substack_md_files"  # Name of the directory we'll save the files to
+NUM_POSTS_TO_SCRAPE: int = 10
+
 
 def extract_main_part(url: str) -> str:
-    # Parse the URL to get the netloc, and split on '.'
-    parts = urlparse(url).netloc.split('.')
-    # Return the main part of the domain, while ignoring 'www' if present
-    return parts[1] if parts[0] == 'www' else parts[0]
+    parts = urlparse(url).netloc.split('.')  # Parse the URL to get the netloc, and split on '.'
+    return parts[1] if parts[0] == 'www' else parts[0]  # Return the main part of the domain, while ignoring 'www' if
+    # present
 
 
 class BaseSubstackScraper(ABC):
-
-    BASE_DIR_NAME: str = "substack_md_files"
-
     def __init__(self, base_substack_url: str):
         if not base_substack_url.endswith("/"):
             base_substack_url += "/"
         self.base_substack_url: str = base_substack_url
 
         url_base: str = extract_main_part(base_substack_url)
-        savdir: str = f"{self.BASE_DIR_NAME}/{url_base}"
+        savdir: str = f"{BASE_DIR_NAME}/{url_base}"
 
-        # Check if the save_dir exists
         if not os.path.exists(savdir):
             os.makedirs(savdir)
             print(f"Created directory {savdir}")
@@ -227,10 +226,9 @@ class PremiumSubstackScraper(BaseSubstackScraper):
         # Find the submit button and click it.
         submit = self.driver.find_element(By.XPATH, "//*[@id=\"substack-login\"]/div[2]/div[2]/form/button")
         submit.click()
-        sleep(5) # Wait for the page to load
+        sleep(5)  # Wait for the page to load
 
     def get_url_soup(self, url: str) -> BeautifulSoup:
-        # sourcery skip: inline-immediately-returned-variable
         """
         Gets soup from URL using logged in selenium driver
         """
@@ -243,9 +241,9 @@ class PremiumSubstackScraper(BaseSubstackScraper):
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Scrape a Substack site.')
-    parser.add_argument('-u', '--url', type=str, required=True,
+    parser.add_argument('-u', '--url', type=str,
                         help='The base URL of the Substack site to scrape.')
-    parser.add_argument('-d', '--directory', type=str, required=True,
+    parser.add_argument('-d', '--directory', type=str,
                         help='The directory to save scraped posts.')
     parser.add_argument('-n', '--number', type=int, default=0,
                         help='The number of posts to scrape. If 0 or not provided, all posts will be scraped.')
@@ -258,21 +256,17 @@ def parse_args() -> argparse.Namespace:
 
 
 def main():
-    premium_scraper = SubstackScraper(
-        base_substack_url="https://www.henrikkarlsson.xyz/",
-    )
-    premium_scraper.scrape_posts(num_posts_to_scrape=10)
+    args = parse_args()
 
-#
-# def main():
-#     args = parse_args()
-#
-#     if args.premium:
-#         scraper = PremiumSubstackScraper(args.url, headless=args.headless)
-#     else:
-#         scraper = SubstackScraper(args.url)
-#
-#     scraper.scrape_posts(args.number)
+    if args.url:
+        if args.premium:
+            scraper = PremiumSubstackScraper(args.url, headless=args.headless)
+        else:
+            scraper = SubstackScraper(args.url)
+        scraper.scrape_posts(args.number)
+    else:
+        scraper = SubstackScraper(base_substack_url=BASE_SUBSTACK_URL)
+        scraper.scrape_posts(num_posts_to_scrape=NUM_POSTS_TO_SCRAPE)
 
 
 if __name__ == "__main__":
