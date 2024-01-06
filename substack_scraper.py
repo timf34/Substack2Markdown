@@ -229,7 +229,7 @@ class PremiumSubstackScraper(BaseSubstackScraper):
         sleep(5)  # Wait for the page to load
 
         if self.is_login_failed():
-            raise("Warning: Login unsuccessful. Please check your email and password, or your account status.\n"
+            raise Exception("Warning: Login unsuccessful. Please check your email and password, or your account status.\n"
                   "Use the non-premium scraper for the non-paid posts.")
 
     def is_login_failed(self) -> bool:
