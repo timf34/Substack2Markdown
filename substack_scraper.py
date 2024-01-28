@@ -1,7 +1,8 @@
 import argparse
+import json
 import os
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from time import sleep
 
 from bs4 import BeautifulSoup
@@ -22,6 +23,7 @@ from config import EMAIL, PASSWORD
 USE_PREMIUM: bool = False # Set to True if you want to login to Substack and convert paid for posts
 BASE_SUBSTACK_URL: str = "https://www.noahpinion.blog/"  # Substack you want to convert to markdown
 BASE_DIR_NAME: str = "substack_md_files"  # Name of the directory we'll save the files to
+JSON_DATA_DIR: str = "data"
 NUM_POSTS_TO_SCRAPE: int = 3
 
 
@@ -37,8 +39,8 @@ class BaseSubstackScraper(ABC):
             base_substack_url += "/"
         self.base_substack_url: str = base_substack_url
 
-        url_base: str = extract_main_part(base_substack_url)
-        save_dir: str = f"{save_dir}/{url_base}"
+        self.writer_name: str = extract_main_part(base_substack_url)
+        save_dir: str = f"{save_dir}/{self.writer_name}"
 
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
@@ -135,9 +137,9 @@ class BaseSubstackScraper(ABC):
 
         return metadata + content
 
-    def soup_to_md(self, soup: BeautifulSoup) -> str:
+    def extract_post_data(self, soup: BeautifulSoup) -> Tuple[str, str, str, str]:
         """
-        Converts substack post soup to markdown
+        Converts substack post soup to markdown, returns metadata and content
         """
         title = soup.select_one("h1.post-title").text.strip()
         subtitle_element = soup.select_one("h3.subtitle")
@@ -151,17 +153,36 @@ class BaseSubstackScraper(ABC):
         like_count = like_count_element.text.strip() if like_count_element else "Like count not available"
 
         content = str(soup.select_one("div.available-content"))
-        content = self.html_to_md(content)
-        return self.combine_metadata_and_content(title, subtitle, date, like_count, content)
+        md = self.html_to_md(content)
+        md_content = self.combine_metadata_and_content(title, subtitle, date, like_count, md)
+        return title, like_count, date, md_content
 
     @abstractmethod
     def get_url_soup(self, url: str) -> str:
         raise NotImplementedError
 
+    def save_essays_data_to_json(self, essays_data: list) -> None:
+        """
+        Saves essays data to a JSON file for a specific author.
+        """
+        data_dir = os.path.join(JSON_DATA_DIR)
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir)
+
+        json_path = os.path.join(data_dir, f'{self.writer_name}.json')
+        if os.path.exists(json_path):
+            with open(json_path, 'r', encoding='utf-8') as file:
+                existing_data = json.load(file)
+            essays_data = existing_data + [data for data in essays_data if data not in existing_data]
+
+        with open(json_path, 'w', encoding='utf-8') as f:
+            json.dump(essays_data, f, ensure_ascii=False, indent=4)
+
     def scrape_posts(self, num_posts_to_scrape: int = 0) -> None:
         """
         Iterates over all posts and saves them as markdown files
         """
+        essays_data = []
         count = 0
         total = num_posts_to_scrape if num_posts_to_scrape != 0 else len(self.post_urls)
         for url in tqdm(self.post_urls, total=total):
@@ -173,8 +194,14 @@ class BaseSubstackScraper(ABC):
                     if soup is None:
                         total += 1
                         continue
-                    md = self.soup_to_md(soup)
+                    title, like_count, date, md = self.extract_post_data(soup)
                     self.save_to_file(filepath, md)
+                    essays_data.append({
+                        "title": title,
+                        "like_count": like_count,
+                        "date": date,
+                        "file_link": filepath
+                    })
                 else:
                     print(f"File already exists: {filepath}")
             except Exception as e:
@@ -182,6 +209,7 @@ class BaseSubstackScraper(ABC):
             count += 1
             if num_posts_to_scrape != 0 and count == num_posts_to_scrape:
                 break
+        self.save_essays_data_to_json(essays_data=essays_data)
 
 
 class SubstackScraper(BaseSubstackScraper):
