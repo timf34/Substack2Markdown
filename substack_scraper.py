@@ -21,9 +21,10 @@ from urllib.parse import urlparse
 from config import EMAIL, PASSWORD
 
 USE_PREMIUM: bool = False # Set to True if you want to login to Substack and convert paid for posts
-BASE_SUBSTACK_URL: str = "https://www.noahpinion.blog/"  # Substack you want to convert to markdown
+BASE_SUBSTACK_URL: str = "https://www.experimental-history.com/"  # Substack you want to convert to markdown
 BASE_DIR_NAME: str = "substack_md_files"  # Name of the directory we'll save the files to
 HTML_TEMPLATE: str = "author_template.html"  # HTML template to use for the author page
+BASE_HTML_DIR: str = "substack_html_pages"
 JSON_DATA_DIR: str = "data"
 NUM_POSTS_TO_SCRAPE: int = 100
 
@@ -38,8 +39,8 @@ def generate_html_file(author_name: str) -> None:
     """
     Generates a HTML file for the given author.
     """
-    if not os.path.exists("html"):
-        os.makedirs("html")
+    if not os.path.exists(BASE_HTML_DIR):
+        os.makedirs(BASE_HTML_DIR)
 
     # Read JSON data
     json_path = os.path.join(JSON_DATA_DIR, f'{author_name}.json')
