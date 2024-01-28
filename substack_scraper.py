@@ -19,9 +19,10 @@ from urllib.parse import urlparse
 
 from config import EMAIL, PASSWORD
 
-BASE_SUBSTACK_URL: str = "https://www.henrikkarlsson.xyz/"  # Substack you want to convert to markdown
+USE_PREMIUM: bool = False # Set to True if you want to login to Substack and convert paid for posts
+BASE_SUBSTACK_URL: str = "https://www.noahpinion.blog/"  # Substack you want to convert to markdown
 BASE_DIR_NAME: str = "substack_md_files"  # Name of the directory we'll save the files to
-NUM_POSTS_TO_SCRAPE: int = 10
+NUM_POSTS_TO_SCRAPE: int = 3
 
 
 def extract_main_part(url: str) -> str:
@@ -116,7 +117,7 @@ class BaseSubstackScraper(ABC):
         return url.split("/")[-1] + filetype
 
     @staticmethod
-    def combine_metadata_and_content(title: str, subtitle: str, content) -> str:
+    def combine_metadata_and_content(title: str, subtitle: str, date: str, content) -> str:
         """
         Combines the title, subtitle, and content into a single string with Markdown format
         """
@@ -129,6 +130,7 @@ class BaseSubstackScraper(ABC):
         metadata = f"# {title}\n\n"
         if subtitle:
             metadata += f"## {subtitle}\n\n"
+        metadata += f"**{date}**\n\n"
 
         return metadata + content
 
@@ -139,9 +141,14 @@ class BaseSubstackScraper(ABC):
         title = soup.select_one("h1.post-title").text.strip()
         subtitle_element = soup.select_one("h3.subtitle")
         subtitle = subtitle_element.text.strip() if subtitle_element else ""
+
+        date_selector = ".pencraft.pc-display-flex.pc-gap-4.pc-reset .pencraft"
+        date_element = soup.select_one(date_selector)
+        date = date_element.text.strip() if date_element else "Date not available"
+
         content = str(soup.select_one("div.available-content"))
         content = self.html_to_md(content)
-        return self.combine_metadata_and_content(title, subtitle, content)
+        return self.combine_metadata_and_content(title, subtitle, date, content)
 
     @abstractmethod
     def get_url_soup(self, url: str) -> str:
@@ -281,7 +288,10 @@ def main():
         scraper.scrape_posts(args.number)
 
     else:  # Use the hardcoded values at the top of the file
-        scraper = PremiumSubstackScraper(base_substack_url=BASE_SUBSTACK_URL, save_dir=args.directory)
+        if USE_PREMIUM:
+            scraper = PremiumSubstackScraper(base_substack_url=BASE_SUBSTACK_URL, save_dir=args.directory)
+        else:
+            scraper = SubstackScraper(base_substack_url=BASE_SUBSTACK_URL, save_dir=args.directory)
         scraper.scrape_posts(num_posts_to_scrape=NUM_POSTS_TO_SCRAPE)
 
 
