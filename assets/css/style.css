@@ -1,0 +1,81 @@
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: rgba(249, 245, 228, 0.51);
+    color: #333;
+}
+
+h1 {
+    padding: 20px;
+    text-align: center;
+    margin-bottom: 20px;
+    font-size: 2.5em;
+    margin: 0;
+    color: #333;
+}
+
+#essays-container {
+    max-width: 800px;
+    margin: 20px auto;
+    padding: 20px;
+    background: rgba(255, 255, 250);
+    box-shadow: 0 2px 4px 0 rgba(0,0,0,.2);
+}
+
+#essays-container ul {
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+}
+
+#essays-container li {
+    border-bottom: 1px solid #ddd;
+    padding: 16px 0;
+}
+
+#essays-container li a {
+    color: #000;
+    text-decoration: none;
+    font-size: 24px;
+    font-weight: bold;
+    display: block;
+}
+
+#essays-container li .subtitle {
+    color: #555;
+    font-size: 18px;
+    margin: 10px 0;
+    font-weight: normal;
+}
+
+#essays-container li .metadata {
+    color: #888;
+    font-size: 16px;
+    margin-bottom: 5px;
+    font-style: normal;
+}
+
+#sort-buttons {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+
+button {
+    background-color: #cbd2f5;
+    border: none;
+    color: white;
+    padding: 10px 20px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 16px;
+    margin: 4px 2px;
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+button:hover {
+    background-color: #a7b2e1;
+}

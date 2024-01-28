@@ -25,7 +25,7 @@ BASE_SUBSTACK_URL: str = "https://www.noahpinion.blog/"  # Substack you want to 
 BASE_DIR_NAME: str = "substack_md_files"  # Name of the directory we'll save the files to
 HTML_TEMPLATE: str = "author_template.html"  # HTML template to use for the author page
 JSON_DATA_DIR: str = "data"
-NUM_POSTS_TO_SCRAPE: int = 3
+NUM_POSTS_TO_SCRAPE: int = 100
 
 
 def extract_main_part(url: str) -> str:
