@@ -117,7 +117,7 @@ class BaseSubstackScraper(ABC):
         return url.split("/")[-1] + filetype
 
     @staticmethod
-    def combine_metadata_and_content(title: str, subtitle: str, date: str, content) -> str:
+    def combine_metadata_and_content(title: str, subtitle: str, date: str, like_count: str, content) -> str:
         """
         Combines the title, subtitle, and content into a single string with Markdown format
         """
@@ -131,6 +131,7 @@ class BaseSubstackScraper(ABC):
         if subtitle:
             metadata += f"## {subtitle}\n\n"
         metadata += f"**{date}**\n\n"
+        metadata += f"**Likes:** {like_count}\n\n"
 
         return metadata + content
 
@@ -146,9 +147,12 @@ class BaseSubstackScraper(ABC):
         date_element = soup.select_one(date_selector)
         date = date_element.text.strip() if date_element else "Date not available"
 
+        like_count_element = soup.select_one("a.post-ufi-button .label")
+        like_count = like_count_element.text.strip() if like_count_element else "Like count not available"
+
         content = str(soup.select_one("div.available-content"))
         content = self.html_to_md(content)
-        return self.combine_metadata_and_content(title, subtitle, date, content)
+        return self.combine_metadata_and_content(title, subtitle, date, like_count, content)
 
     @abstractmethod
     def get_url_soup(self, url: str) -> str:
