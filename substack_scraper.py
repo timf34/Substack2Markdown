@@ -171,7 +171,7 @@ class BaseSubstackScraper(ABC):
 
         return metadata + content
 
-    def extract_post_data(self, soup: BeautifulSoup) -> Tuple[str, str, str, str]:
+    def extract_post_data(self, soup: BeautifulSoup) -> Tuple[str, str, str, str, str]:
         """
         Converts substack post soup to markdown, returns metadata and content
         """
@@ -189,7 +189,7 @@ class BaseSubstackScraper(ABC):
         content = str(soup.select_one("div.available-content"))
         md = self.html_to_md(content)
         md_content = self.combine_metadata_and_content(title, subtitle, date, like_count, md)
-        return title, like_count, date, md_content
+        return title, subtitle, like_count, date, md_content
 
     @abstractmethod
     def get_url_soup(self, url: str) -> str:
@@ -228,10 +228,11 @@ class BaseSubstackScraper(ABC):
                     if soup is None:
                         total += 1
                         continue
-                    title, like_count, date, md = self.extract_post_data(soup)
+                    title, subtitle, like_count, date, md = self.extract_post_data(soup)
                     self.save_to_file(filepath, md)
                     essays_data.append({
                         "title": title,
+                        "subtitle": subtitle,
                         "like_count": like_count,
                         "date": date,
                         "file_link": filepath

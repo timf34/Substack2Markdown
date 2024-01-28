@@ -43,3 +43,11 @@ body {
     margin-top: 5px;
     font-style: italic;
 }
+
+/* Essay subtitle */
+#essays-container li .subtitle {
+    color: #555;
+    font-size: 14px;
+    margin-top: 5px;
+    font-weight: lighter;
+}
