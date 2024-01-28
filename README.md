@@ -2,12 +2,24 @@
 
 Substack2Markdown is a Python tool for scraping free and premium Substack posts and saving them as Markdown 
 files. It will save paid for content as long as you're subscribed to that substack. Most "save for later" apps (such 
-as Pocket) don't save these posts, but with this script you can!
+as Pocket) don't save these posts, but with this script you can now browse and sort through these posts in a 
+user-friendly HTML interface.
 
-Once you run the script, it will create a folder named after the substack in the directory you have specified,
-and then begin to scrape the substack URL, converting the blog posts into markdown files. You can either hardcode the 
-substack URL and the number of posts you'd like to save into the top of the file, or specify them as command line
-arguments.
+![Substack2Markdown Interface](./assets/images/screenshot.png)
+
+Once you run the script, it will create a folder named after the substack in `/substack_md_files`,
+and then begin to scrape the substack URL, converting the blog posts into markdown files. Once all the posts have been
+saved, it will generate an HTML file in `/substack_html_pages` directory that allows you to browse the posts.
+
+You can either hardcode the substack URL and the number of posts you'd like to save into the top of the file, or 
+specify them as command line arguments.
+
+## Features
+
+- Converts Substack posts into Markdown files.
+- Generates an HTML file to browse Markdown files.
+- Supports free and premium content (with subscription).
+- The HTML interface allows sorting essays by date or likes.
 
 ## Installation
 
@@ -61,3 +73,8 @@ To scrape a specific number of posts:
 ```bash
 python substack_scraper.py --url https://example.substack.com --directory /path/to/save/posts --number 5
 ```
+
+## Viewing Markdown Files in Browser
+
+To read the Markdown files in your browser, install the [Markdown Viewer](https://chromewebstore.google.com/detail/markdown-viewer/ckkdlimhmcjmikdlpkmbgfkaikojcbjk)
+browser extension. 
