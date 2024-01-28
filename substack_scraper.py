@@ -23,6 +23,7 @@ from config import EMAIL, PASSWORD
 USE_PREMIUM: bool = False # Set to True if you want to login to Substack and convert paid for posts
 BASE_SUBSTACK_URL: str = "https://www.noahpinion.blog/"  # Substack you want to convert to markdown
 BASE_DIR_NAME: str = "substack_md_files"  # Name of the directory we'll save the files to
+HTML_TEMPLATE: str = "author_template.html"  # HTML template to use for the author page
 JSON_DATA_DIR: str = "data"
 NUM_POSTS_TO_SCRAPE: int = 3
 
@@ -31,6 +32,35 @@ def extract_main_part(url: str) -> str:
     parts = urlparse(url).netloc.split('.')  # Parse the URL to get the netloc, and split on '.'
     return parts[1] if parts[0] == 'www' else parts[0]  # Return the main part of the domain, while ignoring 'www' if
     # present
+
+
+def generate_html_file(author_name: str) -> None:
+    """
+    Generates a HTML file for the given author.
+    """
+    if not os.path.exists("html"):
+        os.makedirs("html")
+
+    # Read JSON data
+    json_path = os.path.join(JSON_DATA_DIR, f'{author_name}.json')
+    with open(json_path, 'r', encoding='utf-8') as file:
+        essays_data = json.load(file)
+
+    # Convert JSON data to a JSON string for embedding
+    embedded_json_data = json.dumps(essays_data, ensure_ascii=False, indent=4)
+
+    with open(HTML_TEMPLATE, 'r', encoding='utf-8') as file:
+        html_template = file.read()
+
+    # Insert the JSON string into the script tag in the HTML template
+    html_with_data = html_template.replace('<script type="application/json" id="essaysData"></script>',
+                                           f'<script type="application/json" id="essaysData">{embedded_json_data}</script>')
+    html_with_author = html_with_data.replace('author_name', author_name)
+
+    # Write the modified HTML to a new file
+    html_output_path = os.path.join('html', f'{author_name}.html')
+    with open(html_output_path, 'w', encoding='utf-8') as file:
+        file.write(html_with_author)
 
 
 class BaseSubstackScraper(ABC):
@@ -210,6 +240,7 @@ class BaseSubstackScraper(ABC):
             if num_posts_to_scrape != 0 and count == num_posts_to_scrape:
                 break
         self.save_essays_data_to_json(essays_data=essays_data)
+        generate_html_file(author_name=self.writer_name)
 
 
 class SubstackScraper(BaseSubstackScraper):
