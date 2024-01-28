@@ -53,8 +53,12 @@ def generate_html_file(author_name: str) -> None:
         html_template = file.read()
 
     # Insert the JSON string into the script tag in the HTML template
-    html_with_data = html_template.replace('<script type="application/json" id="essaysData"></script>',
-                                           f'<script type="application/json" id="essaysData">{embedded_json_data}</script>')
+    html_with_data = html_template.replace(
+        '<!-- AUTHOR_NAME -->', author_name
+    ).replace(
+        '<script type="application/json" id="essaysData"></script>',
+        f'<script type="application/json" id="essaysData">{embedded_json_data}</script>'
+    )
     html_with_author = html_with_data.replace('author_name', author_name)
 
     # Write the modified HTML to a new file
