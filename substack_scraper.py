@@ -352,9 +352,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--headless', action='store_true',
                         help='Include -h in command to run browser in headless mode when using the Premium Substack '
                              'Scraper.')
-    parser.add_argument('--edge-path', type=str, default=r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe',
+    parser.add_argument('--edge-path', type=str, default='',
                         help='Optional: The path to the Edge browser executable (i.e. "path_to_msedge.exe").')
-    parser.add_argument('--edge-driver-path', type=str, default=r'C:\Program Files (x86)\Microsoft\Edge\Application\msedgedriver.exe',
+    parser.add_argument('--edge-driver-path', type=str, default='',
                         help='Optional: The path to the Edge WebDriver executable (i.e. "path_to_msedgedriver.exe").')
 
     return parser.parse_args()
