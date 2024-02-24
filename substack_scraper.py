@@ -20,13 +20,13 @@ from urllib.parse import urlparse
 
 from config import EMAIL, PASSWORD
 
-USE_PREMIUM: bool = False # Set to True if you want to login to Substack and convert paid for posts
-BASE_SUBSTACK_URL: str = "https://reasonalone.substack.com/"  # Substack you want to convert to markdown
+USE_PREMIUM: bool = True  # Set to True if you want to login to Substack and convert paid for posts
+BASE_SUBSTACK_URL: str = "https://www.astralcodexten.com/"  # Substack you want to convert to markdown
 BASE_DIR_NAME: str = "substack_md_files"  # Name of the directory we'll save the files to
 HTML_TEMPLATE: str = "author_template.html"  # HTML template to use for the author page
 BASE_HTML_DIR: str = "substack_html_pages"
 JSON_DATA_DIR: str = "data"
-NUM_POSTS_TO_SCRAPE: int = 10
+NUM_POSTS_TO_SCRAPE: int = 3
 
 
 def extract_main_part(url: str) -> str:
@@ -269,14 +269,27 @@ class SubstackScraper(BaseSubstackScraper):
 
 
 class PremiumSubstackScraper(BaseSubstackScraper):
-    def __init__(self, base_substack_url: str, save_dir: str, headless: bool = False):
+    def __init__(
+            self,
+            base_substack_url: str,
+            save_dir: str,
+            headless: bool = False,
+            edge_path: str = '',
+            edge_driver_path: str = ''
+    ) -> None:
         super().__init__(base_substack_url, save_dir)
 
         options = EdgeOptions()
         if headless:
             options.add_argument("--headless")
+        if edge_path:
+            options.binary_location = edge_path
 
-        service = Service(EdgeChromiumDriverManager().install())
+        if edge_driver_path:
+            service = Service(executable_path=edge_driver_path)
+        else:
+            service = Service(EdgeChromiumDriverManager().install())
+
         self.driver = webdriver.Edge(service=service, options=options)
         self.login()
 
@@ -339,6 +352,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--headless', action='store_true',
                         help='Include -h in command to run browser in headless mode when using the Premium Substack '
                              'Scraper.')
+    parser.add_argument('--edge-path', type=str, default=r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe',
+                        help='Optional: The path to the Edge browser executable (i.e. "path_to_msedge.exe").')
+    parser.add_argument('--edge-driver-path', type=str, default=r'C:\Program Files (x86)\Microsoft\Edge\Application\msedgedriver.exe',
+                        help='Optional: The path to the Edge WebDriver executable (i.e. "path_to_msedgedriver.exe").')
 
     return parser.parse_args()
 
@@ -358,7 +375,12 @@ def main():
 
     else:  # Use the hardcoded values at the top of the file
         if USE_PREMIUM:
-            scraper = PremiumSubstackScraper(base_substack_url=BASE_SUBSTACK_URL, save_dir=args.directory)
+            scraper = PremiumSubstackScraper(
+                base_substack_url=BASE_SUBSTACK_URL,
+                save_dir=args.directory,
+                edge_path=args.edge_path,
+                edge_driver_path=args.edge_driver_path
+            )
         else:
             scraper = SubstackScraper(base_substack_url=BASE_SUBSTACK_URL, save_dir=args.directory)
         scraper.scrape_posts(num_posts_to_scrape=NUM_POSTS_TO_SCRAPE)
