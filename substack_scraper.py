@@ -26,7 +26,7 @@ BASE_DIR_NAME: str = "substack_md_files"  # Name of the directory we'll save the
 HTML_TEMPLATE: str = "author_template.html"  # HTML template to use for the author page
 BASE_HTML_DIR: str = "substack_html_pages"
 JSON_DATA_DIR: str = "data"
-NUM_POSTS_TO_SCRAPE: int = 3
+NUM_POSTS_TO_SCRAPE: int = 3  # Set to 0 if you want all posts
 
 
 def extract_main_part(url: str) -> str:
