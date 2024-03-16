@@ -360,6 +360,9 @@ def parse_args() -> argparse.Namespace:
                         help='Optional: The path to the Edge browser executable (i.e. "path_to_msedge.exe").')
     parser.add_argument('--edge-driver-path', type=str, default='',
                         help='Optional: The path to the Edge WebDriver executable (i.e. "path_to_msedgedriver.exe").')
+    parser.add_argument('--user-agent', type=str, default='',
+                        help='Optional: Specify a custom user agent for selenium browser automation. Useful for '
+                             'passing captcha in headless mode')
 
     return parser.parse_args()
 
