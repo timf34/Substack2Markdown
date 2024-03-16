@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 from config import EMAIL, PASSWORD
 
 USE_PREMIUM: bool = True  # Set to True if you want to login to Substack and convert paid for posts
-BASE_SUBSTACK_URL: str = "https://www.astralcodexten.com/"  # Substack you want to convert to markdown
+BASE_SUBSTACK_URL: str = "https://map.simonsarris.com/"  # Substack you want to convert to markdown
 BASE_DIR_NAME: str = "substack_md_files"  # Name of the directory we'll save the files to
 HTML_TEMPLATE: str = "author_template.html"  # HTML template to use for the author page
 BASE_HTML_DIR: str = "substack_html_pages"
@@ -275,7 +275,8 @@ class PremiumSubstackScraper(BaseSubstackScraper):
             save_dir: str,
             headless: bool = False,
             edge_path: str = '',
-            edge_driver_path: str = ''
+            edge_driver_path: str = '',
+            user_agent: str = ''
     ) -> None:
         super().__init__(base_substack_url, save_dir)
 
@@ -284,6 +285,9 @@ class PremiumSubstackScraper(BaseSubstackScraper):
             options.add_argument("--headless")
         if edge_path:
             options.binary_location = edge_path
+        if user_agent:
+            options.add_argument(f'user-agent={user_agent}')  # Pass this if running headless and blocked by captcha
+
 
         if edge_driver_path:
             service = Service(executable_path=edge_driver_path)
@@ -315,7 +319,7 @@ class PremiumSubstackScraper(BaseSubstackScraper):
         # Find the submit button and click it.
         submit = self.driver.find_element(By.XPATH, "//*[@id=\"substack-login\"]/div[2]/div[2]/form/button")
         submit.click()
-        sleep(5)  # Wait for the page to load
+        sleep(30)  # Wait for the page to load
 
         if self.is_login_failed():
             raise Exception("Warning: Login unsuccessful. Please check your email and password, or your account status.\n"
