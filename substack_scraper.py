@@ -181,7 +181,7 @@ class BaseSubstackScraper(ABC):
 
         if standard_title:
             title = standard_title.text.strip()
-        elif video_title:
+        if video_title:
             title = video_title.text.strip()
         else:
             title = "Title not available"
@@ -189,7 +189,7 @@ class BaseSubstackScraper(ABC):
         subtitle_element = soup.select_one("h3.subtitle")
         subtitle = subtitle_element.text.strip() if subtitle_element else ""
 
-        date_selector = ".pencraft.pc-display-flex.pc-gap-4.pc-reset .pencraft"
+        date_selector = ".byline-wrapper .pencraft.pc-flexDirection-column div.pc-display-flex div"
         date_element = soup.select_one(date_selector)
         date = date_element.text.strip() if date_element else "Date not available"
 
