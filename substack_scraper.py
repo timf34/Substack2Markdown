@@ -176,7 +176,7 @@ class BaseSubstackScraper(ABC):
         """
         Converts substack post soup to markdown, returns metadata and content
         """
-        title = soup.select_one("h1.post-title").text.strip()
+        title = soup.select_one("h1.post-title, h2").text.strip()
         subtitle_element = soup.select_one("h3.subtitle")
         subtitle = subtitle_element.text.strip() if subtitle_element else ""
 
@@ -241,7 +241,7 @@ class BaseSubstackScraper(ABC):
                 else:
                     print(f"File already exists: {filepath}")
             except Exception as e:
-                print(f"Error scraping post: {e}")
+                print(f"Error scraping post at {url}: {e}")
             count += 1
             if num_posts_to_scrape != 0 and count == num_posts_to_scrape:
                 break
