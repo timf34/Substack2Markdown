@@ -176,20 +176,12 @@ class BaseSubstackScraper(ABC):
         """
         Converts substack post soup to markdown, returns metadata and content
         """
-        standard_title = soup.select_one("h1.post-title, h2")
-        video_title = soup.select_one("h2")
-
-        if standard_title:
-            title = standard_title.text.strip()
-        if video_title:
-            title = video_title.text.strip()
-        else:
-            title = "Title not available"
+        title = soup.select_one("h1.post-title, h2").text.strip()
 
         subtitle_element = soup.select_one("h3.subtitle")
         subtitle = subtitle_element.text.strip() if subtitle_element else ""
 
-        date_selector = ".byline-wrapper .pencraft.pc-flexDirection-column div.pc-display-flex div"
+        date_selector = ".pencraft.pc-display-flex.pc-gap-4.pc-reset .pencraft"
         date_element = soup.select_one(date_selector)
         date = date_element.text.strip() if date_element else "Date not available"
 
@@ -380,8 +372,17 @@ def parse_args() -> argparse.Namespace:
 def main():
     args = parse_args()
 
+    SINGLE: str = "https://endofthebenchsports.substack.com/p/dana-white-hits-wife-short-sports"
+    # SINGLE: str = "https://www.experimental-history.com/p/science-will-only-end-once-weve-licked"
+
     if args.directory is None:
         args.directory = BASE_DIR_NAME
+
+    if SINGLE:
+        scraper = SubstackScraper(SINGLE, save_dir=args.directory)
+        scraper.post_urls = [SINGLE]
+        scraper.scrape_posts(args.number)
+        return
 
     if args.url:
         if args.premium:
