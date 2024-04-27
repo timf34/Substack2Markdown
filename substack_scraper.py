@@ -176,7 +176,7 @@ class BaseSubstackScraper(ABC):
         """
         Converts substack post soup to markdown, returns metadata and content
         """
-        title = soup.select_one("h1.post-title, h2").text.strip()
+        title = soup.select_one("h1.post-title, h2").text.strip()  # When a video is present, the title is demoted to h2
 
         subtitle_element = soup.select_one("h3.subtitle")
         subtitle = subtitle_element.text.strip() if subtitle_element else ""
