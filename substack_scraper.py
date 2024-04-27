@@ -372,17 +372,8 @@ def parse_args() -> argparse.Namespace:
 def main():
     args = parse_args()
 
-    SINGLE: str = "https://endofthebenchsports.substack.com/p/dana-white-hits-wife-short-sports"
-    # SINGLE: str = "https://www.experimental-history.com/p/science-will-only-end-once-weve-licked"
-
     if args.directory is None:
         args.directory = BASE_DIR_NAME
-
-    if SINGLE:
-        scraper = SubstackScraper(SINGLE, save_dir=args.directory)
-        scraper.post_urls = [SINGLE]
-        scraper.scrape_posts(args.number)
-        return
 
     if args.url:
         if args.premium:
