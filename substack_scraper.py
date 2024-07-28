@@ -97,7 +97,7 @@ class BaseSubstackScraper(ABC):
             urls = self.filter_urls(urls, self.keywords)
             return urls
         else:
-            print(f'Error fetching sitemap: {response.status_code}')
+            print(f'Error fetching sitemap at {self.base_substack_url}sitemap.xml: {response.status_code}')
             return []
 
     @staticmethod
