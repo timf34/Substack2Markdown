@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 from config import EMAIL, PASSWORD
 
 USE_PREMIUM: bool = False  # Set to True if you want to login to Substack and convert paid for posts
-BASE_SUBSTACK_URL: str = "https://yellowcarding.substack.com/"  # Substack you want to convert to markdown
+BASE_SUBSTACK_URL: str = "https://www.thefitzwilliam.com/"  # Substack you want to convert to markdown
 BASE_DIR_NAME: str = "substack_md_files"  # Name of the directory we'll save the files to
 HTML_TEMPLATE: str = "author_template.html"  # HTML template to use for the author page
 BASE_HTML_DIR: str = "substack_html_pages"
@@ -86,41 +86,48 @@ class BaseSubstackScraper(ABC):
 
     def get_all_post_urls(self) -> List[str]:
         """
-        This method reads the sitemap.xml file and returns a list of all the URLs in the file
+        Attempts to fetch URLs from sitemap.xml, falling back to feed.xml if necessary.
+        """
+        urls = self.fetch_urls_from_sitemap()
+        if not urls:
+            urls = self.fetch_urls_from_feed()
+        return self.filter_urls(urls, self.keywords)
+
+    def fetch_urls_from_sitemap(self) -> List[str]:
+        """
+        Fetches URLs from sitemap.xml.
         """
         sitemap_url = f"{self.base_substack_url}sitemap.xml"
         response = requests.get(sitemap_url)
 
-        if response.ok:
-            root = ET.fromstring(response.content)
-            urls = [element.text for element in root.iter('{http://www.sitemaps.org/schemas/sitemap/0.9}loc')]
-            urls = self.filter_urls(urls, self.keywords)
-            return urls
-        else:
-            print(f'Error fetching sitemap at {self.base_substack_url}sitemap.xml: {response.status_code}')
-            print(
-                'Falling back to trying {self.base_substack_url}feed.xml... '
-                'This only contains the 22 most recent posts.'
-            )
+        if not response.ok:
+            print(f'Error fetching sitemap at {sitemap_url}: {response.status_code}')
+            return []
 
-            feed_url = f"{self.base_substack_url}feed.xml"
-            response = requests.get(feed_url)
+        root = ET.fromstring(response.content)
+        urls = [element.text for element in root.iter('{http://www.sitemaps.org/schemas/sitemap/0.9}loc')]
+        return urls
 
-            if response.ok:
-                root = ET.fromstring(response.content)
-                urls = []
+    def fetch_urls_from_feed(self) -> List[str]:
+        """
+        Fetches URLs from feed.xml.
+        """
+        print('Falling back to feed.xml. This will only contain up to the 22 most recent posts.')
+        feed_url = f"{self.base_substack_url}feed.xml"
+        response = requests.get(feed_url)
 
-                # Find all <item> elements
-                for item in root.findall('.//item'):
-                    # Find the <link> element within each <item>
-                    link = item.find('link')
-                    if link is not None and link.text:
-                        urls.append(link.text)
+        if not response.ok:
+            print(f'Error fetching feed at {feed_url}: {response.status_code}')
+            return []
 
-                urls = self.filter_urls(urls, self.keywords)
-                return urls
-            else:
-                return []
+        root = ET.fromstring(response.content)
+        urls = []
+        for item in root.findall('.//item'):
+            link = item.find('link')
+            if link is not None and link.text:
+                urls.append(link.text)
+
+        return urls
 
     @staticmethod
     def filter_urls(urls: List[str], keywords: List[str]) -> List[str]:
