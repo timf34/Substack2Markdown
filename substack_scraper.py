@@ -20,8 +20,8 @@ from urllib.parse import urlparse
 
 from config import EMAIL, PASSWORD
 
-USE_PREMIUM: bool = True  # Set to True if you want to login to Substack and convert paid for posts
-BASE_SUBSTACK_URL: str = "https://map.simonsarris.com/"  # Substack you want to convert to markdown
+USE_PREMIUM: bool = False  # Set to True if you want to login to Substack and convert paid for posts
+BASE_SUBSTACK_URL: str = "https://yellowcarding.substack.com/"  # Substack you want to convert to markdown
 BASE_DIR_NAME: str = "substack_md_files"  # Name of the directory we'll save the files to
 HTML_TEMPLATE: str = "author_template.html"  # HTML template to use for the author page
 BASE_HTML_DIR: str = "substack_html_pages"
@@ -98,7 +98,29 @@ class BaseSubstackScraper(ABC):
             return urls
         else:
             print(f'Error fetching sitemap at {self.base_substack_url}sitemap.xml: {response.status_code}')
-            return []
+            print(
+                'Falling back to trying {self.base_substack_url}feed.xml... '
+                'This only contains the 22 most recent posts.'
+            )
+
+            feed_url = f"{self.base_substack_url}feed.xml"
+            response = requests.get(feed_url)
+
+            if response.ok:
+                root = ET.fromstring(response.content)
+                urls = []
+
+                # Find all <item> elements
+                for item in root.findall('.//item'):
+                    # Find the <link> element within each <item>
+                    link = item.find('link')
+                    if link is not None and link.text:
+                        urls.append(link.text)
+
+                urls = self.filter_urls(urls, self.keywords)
+                return urls
+            else:
+                return []
 
     @staticmethod
     def filter_urls(urls: List[str], keywords: List[str]) -> List[str]:
