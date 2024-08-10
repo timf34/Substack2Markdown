@@ -1,5 +1,6 @@
 let sortLikesAscending = false;
 let sortDatesAscending = false;
+let showHTML = true;
 
 function sortEssaysByDate(data) {
     sortDatesAscending = !sortDatesAscending;  // Toggle the sort order
@@ -18,7 +19,7 @@ function populateEssays(data) {
     const essaysContainer = document.getElementById('essays-container');
     const list = data.map(essay => `
         <li>
-            <a href="../${essay.html_link}" target="_blank">${essay.title}</a>
+            <a href="../${showHTML ? essay.html_link : essay.file_link}" target="_blank">${essay.title}</a>
             <div class="subtitle">${essay.subtitle}</div>
             <div class="metadata">${essay.like_count} Likes - ${essay.date}</div>
         </li>
@@ -37,6 +38,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('sort-by-likes').addEventListener('click', () => {
         populateEssays(sortEssaysByLikes([...essaysData]));
+    });
+
+    document.getElementById('toggle-format').addEventListener('click', () => {
+        showHTML = !showHTML;
+        populateEssays(essaysData);
+        document.getElementById('toggle-format').textContent = showHTML ? 'Show Markdown' : 'Show HTML';
     });
 
     populateEssays(essaysData);
