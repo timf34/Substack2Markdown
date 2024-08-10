@@ -77,4 +77,5 @@ python substack_scraper.py --url https://example.substack.com --directory /path/
 ## Viewing Markdown Files in Browser
 
 To read the Markdown files in your browser, install the [Markdown Viewer](https://chromewebstore.google.com/detail/markdown-viewer/ckkdlimhmcjmikdlpkmbgfkaikojcbjk)
-browser extension. 
+browser extension. But note, we also save the files as HTML for easy viewing, 
+just set the toggle to HTML on the author homepage. 
