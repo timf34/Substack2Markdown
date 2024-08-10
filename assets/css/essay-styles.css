@@ -1,0 +1,111 @@
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: rgba(249, 245, 228, 0.51);
+    color: #333;
+    line-height: 1.6;
+}
+
+.markdown-content {
+    max-width: 800px;
+    margin: 20px auto;
+    padding: 20px;
+    background: rgba(255, 255, 250);
+    box-shadow: 0 2px 4px 0 rgba(0,0,0,.2);
+}
+
+h1, h2, h3, h4, h5, h6 {
+    padding: 20px 0;
+    text-align: center;
+    margin: 0;
+    color: #333;
+}
+
+h1 { font-size: 2.5em; }
+h2 { font-size: 2em; }
+h3 { font-size: 1.75em; }
+h4 { font-size: 1.5em; }
+h5 { font-size: 1.25em; }
+h6 { font-size: 1em; }
+
+.markdown-content p {
+    max-width: 70ch;
+    margin: 0 auto 1em;
+    text-align: justify;
+}
+
+.markdown-content ul, .markdown-content ol {
+    max-width: 65ch;
+    margin: 0 auto 1em;
+    padding-left: 2em;
+}
+
+.markdown-content li {
+    margin-bottom: 0.5em;
+}
+
+.markdown-content a {
+    color: #0066cc;
+    text-decoration: none;
+}
+
+.markdown-content a:hover {
+    text-decoration: underline;
+}
+
+.markdown-content blockquote {
+    border-left: 4px solid #ddd;
+    padding-left: 1em;
+    margin: 0 auto 1em;
+    max-width: 65ch;
+    font-style: italic;
+    color: #555;
+}
+
+.markdown-content code {
+    background-color: #f4f4f4;
+    padding: 0.2em 0.4em;
+    border-radius: 3px;
+    font-family: monospace;
+}
+
+.markdown-content pre {
+    background-color: #f4f4f4;
+    padding: 1em;
+    border-radius: 5px;
+    overflow-x: auto;
+    max-width: 70ch;
+    margin: 0 auto 1em;
+}
+
+.markdown-content img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 0 auto 1em;
+}
+
+.markdown-content table {
+    border-collapse: collapse;
+    margin: 0 auto 1em;
+    max-width: 70ch;
+}
+
+.markdown-content th, .markdown-content td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+
+.markdown-content th {
+    background-color: #f4f4f4;
+    font-weight: bold;
+}
+
+.markdown-content hr {
+    border: none;
+    border-top: 1px solid #ddd;
+    margin: 2em auto;
+    max-width: 70ch;
+}

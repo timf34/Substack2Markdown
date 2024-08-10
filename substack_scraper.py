@@ -17,7 +17,7 @@ from webdriver_manager.microsoft import EdgeChromiumDriverManager
 from selenium.webdriver.edge.options import Options as EdgeOptions
 from selenium.webdriver.chrome.service import Service
 from urllib.parse import urlparse
-
+import markdown
 from config import EMAIL, PASSWORD
 
 USE_PREMIUM: bool = False  # Set to True if you want to login to Substack and convert paid for posts
@@ -81,6 +81,12 @@ class BaseSubstackScraper(ABC):
             os.makedirs(save_dir)
             print(f"Created directory {save_dir}")
         self.save_dir: str = save_dir
+        
+        self.html_save_dir: str = f"{BASE_HTML_DIR}/{self.writer_name}"
+        if not os.path.exists(self.html_save_dir):
+            os.makedirs(self.html_save_dir)
+            print(f"Created directory {self.html_save_dir}")
+        
         self.keywords: List[str] = ["about", "archive", "podcast"]
         self.post_urls: List[str] = self.get_all_post_urls()
 
@@ -165,6 +171,49 @@ class BaseSubstackScraper(ABC):
 
         with open(filepath, 'w', encoding='utf-8') as file:
             file.write(content)
+            
+    @staticmethod
+    def md_to_html(md_content: str) -> str:
+        """
+        This method converts Markdown to HTML
+        """
+        return markdown.markdown(md_content, extensions=['extra'])
+    
+    
+    def save_to_html_file(self, filepath: str, content: str) -> None:
+        """
+        This method saves HTML content to a file with a link to an external CSS file.
+        """
+        if not isinstance(filepath, str):
+            raise ValueError("filepath must be a string")
+
+        if not isinstance(content, str):
+            raise ValueError("content must be a string")
+
+        # Calculate the relative path from the HTML file to the CSS file
+        html_dir = os.path.dirname(filepath)
+        css_path = os.path.relpath("./assets/css/essay-styles.css", html_dir)
+        css_path = css_path.replace("\\", "/")  # Ensure forward slashes for web paths
+
+        html_content = f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markdown Content</title>
+    <link rel="stylesheet" href="{css_path}">
+</head>
+<body>
+    <main class="markdown-content">
+    {content}
+    </main>
+</body>
+</html>
+"""
+
+        with open(filepath, 'w', encoding='utf-8') as file:
+            file.write(html_content)
 
     @staticmethod
     def get_filename_from_url(url: str, filetype: str = ".md") -> str:
@@ -239,37 +288,45 @@ class BaseSubstackScraper(ABC):
             with open(json_path, 'r', encoding='utf-8') as file:
                 existing_data = json.load(file)
             essays_data = existing_data + [data for data in essays_data if data not in existing_data]
-
         with open(json_path, 'w', encoding='utf-8') as f:
             json.dump(essays_data, f, ensure_ascii=False, indent=4)
 
     def scrape_posts(self, num_posts_to_scrape: int = 0) -> None:
         """
-        Iterates over all posts and saves them as markdown files
+        Iterates over all posts and saves them as markdown and html files
         """
         essays_data = []
         count = 0
         total = num_posts_to_scrape if num_posts_to_scrape != 0 else len(self.post_urls)
         for url in tqdm(self.post_urls, total=total):
             try:
-                filename = self.get_filename_from_url(url, filetype=".md")
-                filepath = os.path.join(self.save_dir, filename)
-                if not os.path.exists(filepath):
+                md_filename = self.get_filename_from_url(url, filetype=".md")
+                html_filename = self.get_filename_from_url(url, filetype=".html")
+                md_filepath = os.path.join(self.save_dir, md_filename)
+                html_filepath = os.path.join(self.html_save_dir, html_filename)
+                
+                if not os.path.exists(md_filepath):
                     soup = self.get_url_soup(url)
                     if soup is None:
                         total += 1
                         continue
                     title, subtitle, like_count, date, md = self.extract_post_data(soup)
-                    self.save_to_file(filepath, md)
+                    self.save_to_file(md_filepath, md)
+                    
+                    # Convert markdown to HTML and save
+                    html_content = self.md_to_html(md)
+                    self.save_to_html_file(html_filepath, html_content)
+                    
                     essays_data.append({
                         "title": title,
                         "subtitle": subtitle,
                         "like_count": like_count,
                         "date": date,
-                        "file_link": filepath
+                        "file_link": md_filepath,
+                        "html_link": html_filepath
                     })
                 else:
-                    print(f"File already exists: {filepath}")
+                    print(f"File already exists: {md_filepath}")
             except Exception as e:
                 print(f"Error scraping post: {e}")
             count += 1
