@@ -7,9 +7,10 @@ from time import sleep
 
 from bs4 import BeautifulSoup
 import html2text
+import markdown
 import requests
-from xml.etree import ElementTree as ET
 from tqdm import tqdm
+from xml.etree import ElementTree as ET
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -17,14 +18,13 @@ from webdriver_manager.microsoft import EdgeChromiumDriverManager
 from selenium.webdriver.edge.options import Options as EdgeOptions
 from selenium.webdriver.chrome.service import Service
 from urllib.parse import urlparse
-import markdown
 from config import EMAIL, PASSWORD
 
 USE_PREMIUM: bool = False  # Set to True if you want to login to Substack and convert paid for posts
-BASE_SUBSTACK_URL: str = "https://www.thefitzwilliam.com/"  # Substack you want to convert to markdown
-BASE_DIR_NAME: str = "substack_md_files"  # Name of the directory we'll save the files to
+BASE_SUBSTACK_URL: str = "https://www.afterbabel.com/"  # Substack you want to convert to markdown
+BASE_MD_DIR: str = "substack_md_files"  # Name of the directory we'll save the .md essay files
+BASE_HTML_DIR: str = "substack_html_files"  # Name of the directory we'll save the .html essay files
 HTML_TEMPLATE: str = "author_template.html"  # HTML template to use for the author page
-BASE_HTML_DIR: str = "substack_html_pages"
 JSON_DATA_DIR: str = "data"
 NUM_POSTS_TO_SCRAPE: int = 3  # Set to 0 if you want all posts
 
@@ -81,8 +81,8 @@ class BaseSubstackScraper(ABC):
             os.makedirs(save_dir)
             print(f"Created directory {save_dir}")
         self.save_dir: str = save_dir
-        
         self.html_save_dir: str = f"{BASE_HTML_DIR}/{self.writer_name}"
+
         if not os.path.exists(self.html_save_dir):
             os.makedirs(self.html_save_dir)
             print(f"Created directory {self.html_save_dir}")
@@ -196,21 +196,21 @@ class BaseSubstackScraper(ABC):
         css_path = css_path.replace("\\", "/")  # Ensure forward slashes for web paths
 
         html_content = f"""
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Markdown Content</title>
-    <link rel="stylesheet" href="{css_path}">
-</head>
-<body>
-    <main class="markdown-content">
-    {content}
-    </main>
-</body>
-</html>
-"""
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Markdown Content</title>
+                <link rel="stylesheet" href="{css_path}">
+            </head>
+            <body>
+                <main class="markdown-content">
+                {content}
+                </main>
+            </body>
+            </html>
+        """
 
         with open(filepath, 'w', encoding='utf-8') as file:
             file.write(html_content)
@@ -459,7 +459,7 @@ def main():
     args = parse_args()
 
     if args.directory is None:
-        args.directory = BASE_DIR_NAME
+        args.directory = BASE_MD_DIR
 
     if args.url:
         if args.premium:
