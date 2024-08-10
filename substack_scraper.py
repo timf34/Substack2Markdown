@@ -479,11 +479,12 @@ def main():
             scraper = PremiumSubstackScraper(
                 base_substack_url=BASE_SUBSTACK_URL,
                 md_save_dir=args.directory,
+                html_save_dir=args.html_directory,
                 edge_path=args.edge_path,
                 edge_driver_path=args.edge_driver_path
             )
         else:
-            scraper = SubstackScraper(base_substack_url=BASE_SUBSTACK_URL, md_save_dir=args.directory)
+            scraper = SubstackScraper(base_substack_url=BASE_SUBSTACK_URL, md_save_dir=args.directory, html_save_dir=args.html_directory)
         scraper.scrape_posts(num_posts_to_scrape=NUM_POSTS_TO_SCRAPE)
 
 
