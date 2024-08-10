@@ -7,9 +7,10 @@ from time import sleep
 
 from bs4 import BeautifulSoup
 import html2text
+import markdown
 import requests
-from xml.etree import ElementTree as ET
 from tqdm import tqdm
+from xml.etree import ElementTree as ET
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -17,14 +18,13 @@ from webdriver_manager.microsoft import EdgeChromiumDriverManager
 from selenium.webdriver.edge.options import Options as EdgeOptions
 from selenium.webdriver.chrome.service import Service
 from urllib.parse import urlparse
-import markdown
 from config import EMAIL, PASSWORD
 
 USE_PREMIUM: bool = False  # Set to True if you want to login to Substack and convert paid for posts
-BASE_SUBSTACK_URL: str = "https://www.thefitzwilliam.com/"  # Substack you want to convert to markdown
-BASE_DIR_NAME: str = "substack_md_files"  # Name of the directory we'll save the files to
+BASE_SUBSTACK_URL: str = "https://www.afterbabel.com/"  # Substack you want to convert to markdown
+BASE_MD_DIR: str = "substack_md_files"  # Name of the directory we'll save the .md essay files
+BASE_HTML_DIR: str = "substack_html_pages"  # Name of the directory we'll save the .html essay files
 HTML_TEMPLATE: str = "author_template.html"  # HTML template to use for the author page
-BASE_HTML_DIR: str = "substack_html_pages"
 JSON_DATA_DIR: str = "data"
 NUM_POSTS_TO_SCRAPE: int = 3  # Set to 0 if you want all posts
 
@@ -69,24 +69,24 @@ def generate_html_file(author_name: str) -> None:
 
 
 class BaseSubstackScraper(ABC):
-    def __init__(self, base_substack_url: str, save_dir: str):
+    def __init__(self, base_substack_url: str, md_save_dir: str, html_save_dir: str):
         if not base_substack_url.endswith("/"):
             base_substack_url += "/"
         self.base_substack_url: str = base_substack_url
 
         self.writer_name: str = extract_main_part(base_substack_url)
-        save_dir: str = f"{save_dir}/{self.writer_name}"
+        md_save_dir: str = f"{md_save_dir}/{self.writer_name}"
 
-        if not os.path.exists(save_dir):
-            os.makedirs(save_dir)
-            print(f"Created directory {save_dir}")
-        self.save_dir: str = save_dir
-        
-        self.html_save_dir: str = f"{BASE_HTML_DIR}/{self.writer_name}"
+        self.md_save_dir: str = md_save_dir
+        self.html_save_dir: str = f"{html_save_dir}/{self.writer_name}"
+
+        if not os.path.exists(md_save_dir):
+            os.makedirs(md_save_dir)
+            print(f"Created md directory {md_save_dir}")
         if not os.path.exists(self.html_save_dir):
             os.makedirs(self.html_save_dir)
-            print(f"Created directory {self.html_save_dir}")
-        
+            print(f"Created html directory {self.html_save_dir}")
+
         self.keywords: List[str] = ["about", "archive", "podcast"]
         self.post_urls: List[str] = self.get_all_post_urls()
 
@@ -196,21 +196,21 @@ class BaseSubstackScraper(ABC):
         css_path = css_path.replace("\\", "/")  # Ensure forward slashes for web paths
 
         html_content = f"""
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Markdown Content</title>
-    <link rel="stylesheet" href="{css_path}">
-</head>
-<body>
-    <main class="markdown-content">
-    {content}
-    </main>
-</body>
-</html>
-"""
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Markdown Content</title>
+                <link rel="stylesheet" href="{css_path}">
+            </head>
+            <body>
+                <main class="markdown-content">
+                {content}
+                </main>
+            </body>
+            </html>
+        """
 
         with open(filepath, 'w', encoding='utf-8') as file:
             file.write(html_content)
@@ -302,7 +302,7 @@ class BaseSubstackScraper(ABC):
             try:
                 md_filename = self.get_filename_from_url(url, filetype=".md")
                 html_filename = self.get_filename_from_url(url, filetype=".html")
-                md_filepath = os.path.join(self.save_dir, md_filename)
+                md_filepath = os.path.join(self.md_save_dir, md_filename)
                 html_filepath = os.path.join(self.html_save_dir, html_filename)
                 
                 if not os.path.exists(md_filepath):
@@ -337,8 +337,8 @@ class BaseSubstackScraper(ABC):
 
 
 class SubstackScraper(BaseSubstackScraper):
-    def __init__(self, base_substack_url: str, save_dir: str):
-        super().__init__(base_substack_url, save_dir)
+    def __init__(self, base_substack_url: str, md_save_dir: str, html_save_dir: str):
+        super().__init__(base_substack_url, md_save_dir, html_save_dir)
 
     def get_url_soup(self, url: str) -> Optional[BeautifulSoup]:
         """
@@ -359,13 +359,14 @@ class PremiumSubstackScraper(BaseSubstackScraper):
     def __init__(
             self,
             base_substack_url: str,
-            save_dir: str,
+            md_save_dir: str,
+            html_save_dir: str,
             headless: bool = False,
             edge_path: str = '',
             edge_driver_path: str = '',
             user_agent: str = ''
     ) -> None:
-        super().__init__(base_substack_url, save_dir)
+        super().__init__(base_substack_url, md_save_dir, html_save_dir)
 
         options = EdgeOptions()
         if headless:
@@ -451,6 +452,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--user-agent', type=str, default='',
                         help='Optional: Specify a custom user agent for selenium browser automation. Useful for '
                              'passing captcha in headless mode')
+    parser.add_argument('--html-directory', type=str,
+                        help='The directory to save scraped posts as HTML files.')
 
     return parser.parse_args()
 
@@ -459,25 +462,29 @@ def main():
     args = parse_args()
 
     if args.directory is None:
-        args.directory = BASE_DIR_NAME
+        args.directory = BASE_MD_DIR
+
+    if args.html_directory is None:
+        args.html_directory = BASE_HTML_DIR
 
     if args.url:
         if args.premium:
-            scraper = PremiumSubstackScraper(args.url, headless=args.headless, save_dir=args.directory)
+            scraper = PremiumSubstackScraper(args.url, headless=args.headless, md_save_dir=args.directory, html_save_dir=args.html_directory)
         else:
-            scraper = SubstackScraper(args.url, save_dir=args.directory)
+            scraper = SubstackScraper(args.url, md_save_dir=args.directory, html_save_dir=args.html_directory)
         scraper.scrape_posts(args.number)
 
     else:  # Use the hardcoded values at the top of the file
         if USE_PREMIUM:
             scraper = PremiumSubstackScraper(
                 base_substack_url=BASE_SUBSTACK_URL,
-                save_dir=args.directory,
+                md_save_dir=args.directory,
+                html_save_dir=args.html_directory,
                 edge_path=args.edge_path,
                 edge_driver_path=args.edge_driver_path
             )
         else:
-            scraper = SubstackScraper(base_substack_url=BASE_SUBSTACK_URL, save_dir=args.directory)
+            scraper = SubstackScraper(base_substack_url=BASE_SUBSTACK_URL, md_save_dir=args.directory, html_save_dir=args.html_directory)
         scraper.scrape_posts(num_posts_to_scrape=NUM_POSTS_TO_SCRAPE)
 
 
