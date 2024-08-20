@@ -1,3 +1,9 @@
 /substack_md_files
 config.py
 setup.py
+venv
+**/__pycache__/
+data/*
+!data/README.md
+substack_html_pages/*
+!substack_html_pages/README.md
