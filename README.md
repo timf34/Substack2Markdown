@@ -1,9 +1,12 @@
 ﻿# Substack2Markdown
 
-Substack2Markdown is a Python tool for downloading free and premium Substack posts and saving them as both Markdown and HTML
-files. It will save paid for content as long as you're subscribed to that substack. Most "save for later" apps (such 
-as Pocket) don't save these posts, but with this script you can now browse and sort through these posts in a 
-user-friendly HTML interface.
+Substack2Markdown is a Python tool for downloading free and premium Substack posts and saving them as both Markdown and 
+HTML files, and includes a simple HTML interface to browse and sort through the posts. It will save paid for content as 
+long as you're subscribed to that substack. 
+
+🆕 @Firevvork has built a web version of this tool at [Substack Reader](https://www.substacktools.com/reader) - no 
+installation required! (Works for free Substacks only.)
+
 
 ![Substack2Markdown Interface](./assets/images/screenshot.png)
 
@@ -74,8 +77,20 @@ To scrape a specific number of posts:
 python substack_scraper.py --url https://example.substack.com --directory /path/to/save/posts --number 5
 ```
 
+### Online Version
+
+For a hassle-free experience without any local setup:
+
+1. Visit [Substack Reader](https://www.substacktools.com/reader)
+2. Enter the Substack URL you want to read or export
+3. Click "Go" to instantly view the content or "Export" to download Markdown files
+
+This online version provides a user-friendly web interface for reading and exporting free Substack articles, with no installation required. However, please note that the online version currently does not support exporting premium content. For full functionality, including premium content export, please use the local script as described above.
+
 ## Viewing Markdown Files in Browser
 
 To read the Markdown files in your browser, install the [Markdown Viewer](https://chromewebstore.google.com/detail/markdown-viewer/ckkdlimhmcjmikdlpkmbgfkaikojcbjk)
 browser extension. But note, we also save the files as HTML for easy viewing, 
 just set the toggle to HTML on the author homepage. 
+
+Or you can use our [Substack Reader](https://www.substacktools.com/reader) online tool, which allows you to read and export free Substack articles directly in your browser. (Note: Premium content export is currently only available in the local script version)
