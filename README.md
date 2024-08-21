@@ -1,9 +1,12 @@
 ﻿# Substack2Markdown
 
-Substack2Markdown is a Python tool for downloading free and premium Substack posts and saving them as both Markdown and HTML
-files. It will save paid for content as long as you're subscribed to that substack.
+Substack2Markdown is a Python tool for downloading free and premium Substack posts and saving them as both Markdown and 
+HTML files, and includes a simple HTML interface to browse and sort through the posts. It will save paid for content as 
+long as you're subscribed to that substack. 
 
-> 🆕 ✨ Now available online! Try our web version at [Substack Reader](https://www.substacktools.com/reader) - no installation required!
+🆕 @Firevvork has built a web version of this tool at [Substack Reader](https://www.substacktools.com/reader) - no 
+installation required! (Works for free Substacks only.)
+
 
 ![Substack2Markdown Interface](./assets/images/screenshot.png)
 
@@ -20,7 +23,6 @@ specify them as command line arguments.
 - Generates an HTML file to browse Markdown files.
 - Supports free and premium content (with subscription).
 - The HTML interface allows sorting essays by date or likes.
-- Online version available at [Substack Reader](https://www.substacktools.com/reader) - no local setup required!
 
 ## Installation
 
