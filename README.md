@@ -85,7 +85,7 @@ For a hassle-free experience without any local setup:
 2. Enter the Substack URL you want to read or export
 3. Click "Go" to instantly view the content or "Export" to download Markdown files
 
-This online version provides a user-friendly web interface for reading and exporting free Substack articles, with no installation required. However, please note that the online version currently does not support exporting premium content. For full functionality, including premium content export, please use the local script as described above.
+This online version provides a user-friendly web interface for reading and exporting free Substack articles, with no installation required. However, please note that the online version currently does not support exporting premium content. For full functionality, including premium content export, please use the local script as described above. Built by @Firevvork. 
 
 ## Viewing Markdown Files in Browser
 
