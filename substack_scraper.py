@@ -59,7 +59,7 @@ def sanitize_filename(url: str) -> str:
     # Extract original filename from CDN URL
     if "substackcdn.com" in url:
         # Get the actual image URL after the CDN parameters
-        original_url = unquote(url.split("/https%3A%2F%2F")[1])
+        original_url = unquote(url.split("https://")[1])
         filename = original_url.split("/")[-1]
     else:
         filename = url.split("/")[-1]
@@ -80,17 +80,22 @@ def download_image(url: str, save_path: Path, pbar: Optional[tqdm] = None) -> Op
     try:
         response = requests.get(url, stream=True)
         if response.status_code == 200:
+            print('HIII')
             save_path.parent.mkdir(parents=True, exist_ok=True)
             with open(save_path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
                         f.write(chunk)
+            print("HI12")
             if pbar:
+                print("PBAR")
                 pbar.update(1)
             return str(save_path)
     except Exception as e:
         if pbar:
             pbar.write(f"Error downloading image {url}: {str(e)}")
+        else:
+            print(f"Error downloading image {url}: {str(e)}")
     return None
 
 def process_markdown_images(md_content: str, author: str, post_slug: str, pbar: Optional[tqdm] = None) -> str:
@@ -101,7 +106,6 @@ def process_markdown_images(md_content: str, author: str, post_slug: str, pbar: 
         url = match.group(0).strip('()')
         filename = sanitize_filename(url)
         save_path = image_dir / filename
-        
         if not save_path.exists():
             download_image(url, save_path, pbar)
         
