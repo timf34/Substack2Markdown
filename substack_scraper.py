@@ -24,14 +24,14 @@ from selenium.webdriver.edge.options import Options as EdgeOptions
 from selenium.webdriver.chrome.service import Service
 from config import EMAIL, PASSWORD
 
-USE_PREMIUM: bool = False
-BASE_SUBSTACK_URL: str = "https://www.thefitzwilliam.com/"
-BASE_MD_DIR: str = "substack_md_files"
-BASE_HTML_DIR: str = "substack_html_pages"
-BASE_IMAGE_DIR: str = "substack_images"
-HTML_TEMPLATE: str = "author_template.html"
+USE_PREMIUM: bool = False  # Set to True if you want to login to Substack and convert paid for posts
+BASE_SUBSTACK_URL: str = "https://www.thefitzwilliam.com/"  # Substack you want to convert to markdown
+BASE_MD_DIR: str = "substack_md_files"  # Name of the directory we'll save the .md essay files
+BASE_HTML_DIR: str = "substack_html_pages"  # Name of the directory we'll save the .html essay files
+BASE_IMAGE_DIR: str = "substack_images" # Name of the directory we'll save images to if --images is passed in
+HTML_TEMPLATE: str = "author_template.html"  # HTML template to use for the author page
 JSON_DATA_DIR: str = "data"
-NUM_POSTS_TO_SCRAPE: int = 3
+NUM_POSTS_TO_SCRAPE: int = 3  # Set to 0 if you want all posts
 
 def count_images_in_markdown(md_content: str) -> int:
     """Count number of Substack CDN image URLs in markdown content."""
@@ -47,8 +47,9 @@ def get_publication_url(url: str) -> str:
     return f"{parsed.scheme}://{parsed.netloc}/"
 
 def extract_main_part(url: str) -> str:
-    parts = urlparse(url).netloc.split('.')
-    return parts[1] if parts[0] == 'www' else parts[0]
+    parts = urlparse(url).netloc.split('.')  # Parse the URL to get the netloc, and split on '.'
+    return parts[1] if parts[0] == 'www' else parts[0]  # Return the main part of the domain, while ignoring 'www' if
+    # present
 
 def get_post_slug(url: str) -> str:
     match = re.search(r'/p/([^/]+)', url)
@@ -113,49 +114,57 @@ def process_markdown_images(md_content: str, author: str, post_slug: str, pbar: 
     return re.sub(pattern, replace_image, md_content)
 
 def generate_html_file(author_name: str) -> None:
+    """
+    Generates a HTML file for the given author.
+    """
     if not os.path.exists(BASE_HTML_DIR):
         os.makedirs(BASE_HTML_DIR)
 
+    # Read JSON data
     json_path = os.path.join(JSON_DATA_DIR, f'{author_name}.json')
     with open(json_path, 'r', encoding='utf-8') as file:
         essays_data = json.load(file)
 
+    # Convert JSON data to a JSON string for embedding
     embedded_json_data = json.dumps(essays_data, ensure_ascii=False, indent=4)
 
     with open(HTML_TEMPLATE, 'r', encoding='utf-8') as file:
         html_template = file.read()
 
+    # Insert the JSON string into the script tag in the HTML template
     html_with_data = html_template.replace('<!-- AUTHOR_NAME -->', author_name).replace(
         '<script type="application/json" id="essaysData"></script>',
         f'<script type="application/json" id="essaysData">{embedded_json_data}</script>'
     )
     html_with_author = html_with_data.replace('author_name', author_name)
 
+    # Write the modified HTML to a new file
     html_output_path = os.path.join(BASE_HTML_DIR, f'{author_name}.html')
     with open(html_output_path, 'w', encoding='utf-8') as file:
         file.write(html_with_author)
 
+
 class BaseSubstackScraper(ABC):
-    def __init__(self, url: str, md_save_dir: str, html_save_dir: str, download_images: bool = False):
-        self.is_single_post = is_post_url(url)
-        self.base_substack_url = get_publication_url(url)
-        self.writer_name = extract_main_part(self.base_substack_url)
-        self.post_slug = get_post_slug(url) if self.is_single_post else None
+    def __init__(self, base_substack_url: str, md_save_dir: str, html_save_dir: str, download_images: bool = False):
+        self.is_single_post: bool = is_post_url(base_substack_url)
+        self.base_substack_url: str = get_publication_url(base_substack_url)
+        self.writer_name: str = extract_main_part(self.base_substack_url)
+        self.post_slug: Optional[str] = get_post_slug(base_substack_url) if self.is_single_post else None
         
-        self.md_save_dir = Path(md_save_dir) / self.writer_name
-        self.html_save_dir = Path(html_save_dir) / self.writer_name
-        self.image_dir = Path(BASE_IMAGE_DIR) / self.writer_name
-        self.download_images = download_images
+        self.md_save_dir: str = Path(md_save_dir) / self.writer_name
+        self.html_save_dir: str = Path(html_save_dir) / self.writer_name
+        self.image_dir: str = Path(BASE_IMAGE_DIR) / self.writer_name
+        self.download_images: bool = download_images
 
         for directory in [self.md_save_dir, self.html_save_dir]:
             directory.mkdir(parents=True, exist_ok=True)
             print(f"Created directory {directory}")
 
         if self.is_single_post:
-            self.post_urls = [url]
+            self.post_urls = [base_substack_url]
         else:
-            self.keywords = ["about", "archive", "podcast"]
-            self.post_urls = self.get_all_post_urls()
+            self.keywords: List[str] = ["about", "archive", "podcast"]
+            self.post_urls: List[str] = self.get_all_post_urls()
 
     def get_all_post_urls(self) -> List[str]:
         """
@@ -365,7 +374,9 @@ class BaseSubstackScraper(ABC):
             json.dump(essays_data, f, ensure_ascii=False, indent=4)
 
     def scrape_posts(self, num_posts_to_scrape: int = 0) -> None:
-        """Iterates over posts and saves them as markdown and html files with progress bars."""
+        """
+        Iterates over all posts and saves them as markdown and html files
+        """
         essays_data = []
         count = 0
         total = num_posts_to_scrape if num_posts_to_scrape != 0 else len(self.post_urls)
@@ -523,43 +534,58 @@ class PremiumSubstackScraper(BaseSubstackScraper):
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Scrape a Substack site or individual post.")
     parser.add_argument(
-        "-u", "--url", type=str, required=True,
-        help="URL of either a Substack publication or individual post"
+        "-u", "--url", type=str, help="The base URL of the Substack site to scrape."
     )
     parser.add_argument(
         "-d", "--directory", type=str, help="The directory to save scraped posts."
     )
     parser.add_argument(
-        "-n", "--number", type=int, default=0,
-        help="The number of posts to scrape. If 0 or not provided, all posts will be scraped. Ignored for single posts."
+        "-n",
+        "--number",
+        type=int,
+        default=0,
+        help="The number of posts to scrape. If 0 or not provided, all posts will be scraped.",
     )
     parser.add_argument(
-        "--images", action="store_true",
+        "-p",
+        "--premium",
+        action="store_true",
+        help="Include -p in command to use the Premium Substack Scraper with selenium.",
+    )
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="Include -h in command to run browser in headless mode when using the Premium Substack "
+        "Scraper.",
+    )
+    parser.add_argument(
+        "--edge-path",
+        type=str,
+        default="",
+        help='Optional: The path to the Edge browser executable (i.e. "path_to_msedge.exe").',
+    )
+    parser.add_argument(
+        "--edge-driver-path",
+        type=str,
+        default="",
+        help='Optional: The path to the Edge WebDriver executable (i.e. "path_to_msedgedriver.exe").',
+    )
+    parser.add_argument(
+        "--user-agent",
+        type=str,
+        default="",
+        help="Optional: Specify a custom user agent for selenium browser automation. Useful for "
+        "passing captcha in headless mode",
+    )
+    parser.add_argument(
+        "--html-directory",
+        type=str,
+        help="The directory to save scraped posts as HTML files.",
+    )
+    parser.add_argument(
+        "--images",
+        action="store_true",
         help="Download images and update markdown to use local paths"
-    )
-    parser.add_argument(
-        "-p", "--premium", action="store_true",
-        help="Use the Premium Substack Scraper with selenium."
-    )
-    parser.add_argument(
-        "--headless", action="store_true",
-        help="Run browser in headless mode when using the Premium Substack Scraper."
-    )
-    parser.add_argument(
-        "--edge-path", type=str, default="",
-        help='Optional: The path to the Edge browser executable.'
-    )
-    parser.add_argument(
-        "--edge-driver-path", type=str, default="",
-        help='Optional: The path to the Edge WebDriver executable.'
-    )
-    parser.add_argument(
-        "--user-agent", type=str, default="",
-        help="Optional: Specify a custom user agent for selenium browser automation."
-    )
-    parser.add_argument(
-        "--html-directory", type=str,
-        help="The directory to save scraped posts as HTML files."
     )
     return parser.parse_args()
 
@@ -572,21 +598,42 @@ def main():
     if args.html_directory is None:
         args.html_directory = BASE_HTML_DIR
 
-    if args.premium:
-        scraper = PremiumSubstackScraper(
-            args.url,
-            headless=args.headless,
-            md_save_dir=args.directory,
-            html_save_dir=args.html_directory,
-            download_images=args.images
-        )
-    else:
-        scraper = SubstackScraper(
-            args.url,
-            md_save_dir=args.directory,
-            html_save_dir=args.html_directory,
-            download_images=args.images
-        )
+    if args.url:
+        if args.premium:
+            scraper = PremiumSubstackScraper(
+                args.url,
+                headless=args.headless,
+                md_save_dir=args.directory,
+                html_save_dir=args.html_directory,
+                download_images=args.images
+            )
+        else:
+            scraper = SubstackScraper(
+                args.url,
+                md_save_dir=args.directory,
+                html_save_dir=args.html_directory,
+                download_images=args.images
+            )
+        scraper.scrape_posts(args.number)
+
+    else:  # Use the hardcoded values at the top of the file
+        if USE_PREMIUM:
+            scraper = PremiumSubstackScraper(
+                base_substack_url=BASE_SUBSTACK_URL,
+                md_save_dir=args.directory,
+                html_save_dir=args.html_directory,
+                edge_path=args.edge_path,
+                edge_driver_path=args.edge_driver_path,
+                download_images=args.images
+            )
+        else:
+            scraper = SubstackScraper(
+                base_substack_url=BASE_SUBSTACK_URL,
+                md_save_dir=args.directory,
+                html_save_dir=args.html_directory,
+                download_images=args.images
+            )
+        scraper.scrape_posts(num_posts_to_scrape=NUM_POSTS_TO_SCRAPE)
     
     scraper.scrape_posts(args.number)
 
