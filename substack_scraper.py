@@ -80,15 +80,12 @@ def download_image(url: str, save_path: Path, pbar: Optional[tqdm] = None) -> Op
     try:
         response = requests.get(url, stream=True)
         if response.status_code == 200:
-            print('HIII')
             save_path.parent.mkdir(parents=True, exist_ok=True)
             with open(save_path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
                         f.write(chunk)
-            print("HI12")
             if pbar:
-                print("PBAR")
                 pbar.update(1)
             return str(save_path)
     except Exception as e:
@@ -390,13 +387,14 @@ class BaseSubstackScraper(ABC):
                             
                         title, subtitle, like_count, date, md = self.extract_post_data(soup)
                         
-                        # Count images before downloading
-                        total_images = count_images_in_markdown(md)
-                        post_slug = url.split("/p/")[-1].split("/")[0]
-                        
-                        with tqdm(total=total_images, desc=f"Downloading images for {post_slug}", leave=False) as img_pbar:
-                            md = process_markdown_images(md, self.writer_name, post_slug, img_pbar)
+                        if self.download_images:
+                            # Count images before downloading
+                            total_images = count_images_in_markdown(md)
+                            post_slug = url.split("/p/")[-1].split("/")[0]
                             
+                            with tqdm(total=total_images, desc=f"Downloading images for {post_slug}", leave=False) as img_pbar:
+                                md = process_markdown_images(md, self.writer_name, post_slug, img_pbar)
+                                
                         self.save_to_file(md_filepath, md)
                         html_content = self.md_to_html(md)
                         self.save_to_html_file(html_filepath, html_content)

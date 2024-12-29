@@ -177,5 +177,32 @@ def test_directory_structure(temp_dir):
     assert "test" in str(scraper.md_save_dir)
     assert "test" in str(scraper.html_save_dir)
 
+def test_scraper_without_images(temp_dir):
+    """Test that images are not downloaded when --images flag is not set"""
+    
+    # Initialize scraper with images=False
+    scraper = SubstackScraper(
+        base_substack_url="https://on.substack.com",
+        md_save_dir=str(temp_dir / "substack_md_files"),
+        html_save_dir=str(temp_dir / "substack_html_pages"),
+        download_images=False
+    )
+    
+    # Run scraper
+    scraper.scrape_posts(num_posts_to_scrape=1)
+    
+    # # Check that markdown files were created
+    md_files = list(Path(temp_dir / "substack_md_files" / "on").glob("*.md"))
+    assert len(md_files) > 0
+    
+    # Check that no image directory was created
+    img_dir = temp_dir / "substack_images" / "on"
+    assert not img_dir.exists()
+    
+    # Verify markdown content still contains original image URLs
+    with open(md_files[0], 'r') as f:
+        content = f.read()
+        assert "https://substackcdn.com/image/fetch" in content
+
 if __name__ == "__main__":
     pytest.main(["-v"])
