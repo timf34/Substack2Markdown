@@ -33,10 +33,45 @@ HTML_TEMPLATE: str = "author_template.html"  # HTML template to use for the auth
 JSON_DATA_DIR: str = "data"
 NUM_POSTS_TO_SCRAPE: int = 3  # Set to 0 if you want all posts
 
+def clean_linked_images(md_content: str) -> str:
+    """
+    Converts markdown linked images to simple image references.
+    
+    Args:
+        md_content: String containing markdown content
+        
+    Returns:
+        String with cleaned markdown where linked images are converted to simple image references
+        
+    Example:
+        >>> md = "[![alt text](/img/test.png)](/img/test.png)"
+        >>> clean_linked_images(md)
+        '![alt text](/img/test.png)'
+    """
+    # Pattern matches: [![any text](/path/img.ext)](/path/img.ext)
+    pattern = r'\[!\[(.*?)\]\((.*?)\)\]\(.*?\)'
+    
+    # Replace with: ![text](/path/img.ext)
+    cleaned = re.sub(pattern, r'![\1](\2)', md_content)
+    
+    return cleaned
+
 def count_images_in_markdown(md_content: str) -> int:
-    """Count number of Substack CDN image URLs in markdown content."""
-    pattern = r'https://substackcdn\.com/image/fetch/[^\s\)]+\)'
-    matches = re.findall(pattern, md_content)
+    """
+    Count number of image references in markdown content.
+    
+    Args:
+        md_content: Markdown content to analyze
+        
+    Returns:
+        Number of unique images found
+    """
+    # First clean linked images
+    cleaned_content = clean_linked_images(md_content)
+    
+    # Then count remaining image references
+    pattern = r'!\[.*?\]\((.*?)\)'
+    matches = re.findall(pattern, cleaned_content)
     return len(matches)
 
 def is_post_url(url: str) -> bool:
@@ -99,6 +134,9 @@ def download_image(url: str, save_path: Path, pbar: Optional[tqdm] = None) -> Op
 def process_markdown_images(md_content: str, author: str, post_slug: str, pbar: Optional[tqdm] = None) -> str:
     """Process markdown content to download images and update references."""
     image_dir = Path(BASE_IMAGE_DIR) / author / post_slug
+    
+    # First clean up any linked images
+    md_content = clean_linked_images(md_content)
     
     def replace_image(match):
         url = match.group(0).strip('()')

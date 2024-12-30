@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 from substack_scraper import (
     BASE_IMAGE_DIR,
     SubstackScraper,
+    clean_linked_images,
     count_images_in_markdown,
     sanitize_filename,
     process_markdown_images,
@@ -177,7 +178,130 @@ def test_directory_structure(temp_dir):
     assert "test" in str(scraper.md_save_dir)
     assert "test" in str(scraper.html_save_dir)
 
-def test_scraper_without_images(temp_dir):
+@pytest.mark.parametrize("test_case", [
+    {
+        "name": "basic_cleaning",
+        "input": """
+        Some text here
+        [![Image 1](/img/test/image1.png)](/img/test/image1.png)
+        More text
+        [![](/img/test/image2.jpg)](/img/test/image2.jpg)
+        Final text
+        """,
+        "expected": """
+        Some text here
+        ![Image 1](/img/test/image1.png)
+        More text
+        ![](/img/test/image2.jpg)
+        Final text
+        """
+    },
+    {
+        "name": "mixed_content",
+        "input": """
+        Regular link: [Link text](https://example.com)
+        Regular image: ![Alt text](/img/regular.jpg)
+        Linked image: [![Image](/img/linked/test.png)](/img/linked/test.png)
+        """,
+        "expected": """
+        Regular link: [Link text](https://example.com)
+        Regular image: ![Alt text](/img/regular.jpg)
+        Linked image: ![Image](/img/linked/test.png)
+        """
+    },
+    {
+        "name": "substack_cdn",
+        "input": """
+        [![](/img/test/image1.jpg)](https://substackcdn.com/image/fetch/test1.jpg)
+        [![Alt text](https://substackcdn.com/image/fetch/test2.jpg)](https://substackcdn.com/image/fetch/test2.jpg)
+        """,
+        "expected": """
+        ![](/img/test/image1.jpg)
+        ![Alt text](https://substackcdn.com/image/fetch/test2.jpg)
+        """
+    },
+    {
+        "name": "no_changes_needed",
+        "input": """
+        # Header
+        Regular text
+        ![Image](/img/test.jpg)
+        [Link](https://example.com)
+        """,
+        "expected": """
+        # Header
+        Regular text
+        ![Image](/img/test.jpg)
+        [Link](https://example.com)
+        """
+    },
+    {
+        "name": "empty_content",
+        "input": "",
+        "expected": ""
+    },
+    {
+        "name": "preserve_newlines",
+        "input": """
+        Line 1
+
+        [![Image](/test.jpg)](/test.jpg)
+
+        Line 2
+        """,
+        "expected": """
+        Line 1
+
+        ![Image](/test.jpg)
+
+        Line 2
+        """
+    },
+    {
+        "name": "special_characters",
+        "input": """
+        [![Test & Demo](/img/test&demo.jpg)](/img/test&demo.jpg)
+        [![Spaces Test](/img/spaces%20test.jpg)](/img/spaces%20test.jpg)
+        """,
+        "expected": """
+        ![Test & Demo](/img/test&demo.jpg)
+        ![Spaces Test](/img/spaces%20test.jpg)
+        """
+    }
+])
+def test_clean_linked_images(test_case):
+    """
+    Parametrized test for cleaning linked images in markdown content.
+    Tests various scenarios including basic cleaning, mixed content,
+    CDN URLs, empty content, and special characters.
+    """
+    result = clean_linked_images(test_case["input"])
+    assert result.strip() == test_case["expected"].strip()
+
+def test_clean_linked_images_integration(temp_dir, monkeypatch):
+    """Test integration with markdown processing pipeline."""
+    # Initialize scraper with images=False
+    scraper = SubstackScraper(
+        base_substack_url="https://on.substack.com",
+        md_save_dir=str(temp_dir / "substack_md_files"),
+        html_save_dir=str(temp_dir / "substack_html_pages"),
+        download_images=True
+    )
+    # Run scraper
+    scraper.scrape_posts(num_posts_to_scrape=1)
+    
+    # # Check that markdown files were created
+    md_files = list(Path(temp_dir / "substack_md_files" / "on").glob("*.md"))
+    assert len(md_files) > 0
+    
+    # Verify markdown content still contains original image URLs
+    with open(md_files[0], 'r') as f:
+        content = f.read()
+        assert "[![" not in content
+        assert "](" in content
+        assert "![" in content
+        
+def test_scraper_without_images_integration(temp_dir):
     """Test that images are not downloaded when --images flag is not set"""
     
     # Initialize scraper with images=False
