@@ -257,9 +257,10 @@ class BaseSubstackScraper(ABC):
         subtitle_element = soup.select_one("h3.subtitle")
         subtitle = subtitle_element.text.strip() if subtitle_element else ""
 
+        
         date_element = soup.find(
             "div",
-            class_="pencraft pc-reset _color-pub-secondary-text_1xu16_194 _line-height-20_1xu16_81 _font-meta_1xu16_116 _size-11_1xu16_32 _weight-medium_1xu16_146 _transform-uppercase_1xu16_241 _reset_1xu16_2 _meta_1xu16_441"
+            class_="pencraft pc-reset color-pub-secondary-text-hGQ02T line-height-20-t4M0El font-meta-MWBumP size-11-NuY2Zx weight-medium-fw81nC transform-uppercase-yKDgcq reset-IxiVJZ meta-EgzBVA"
         )
         date = date_element.text.strip() if date_element else "Date not found"
 
