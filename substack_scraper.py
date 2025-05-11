@@ -427,15 +427,31 @@ class PremiumSubstackScraper(BaseSubstackScraper):
         error_container = self.driver.find_elements(By.ID, 'error-container')
         return len(error_container) > 0 and error_container[0].is_displayed()
 
-    def get_url_soup(self, url: str) -> BeautifulSoup:
+    def get_url_soup(self, url: str, max_attemps: int = 5) -> BeautifulSoup:
         """
         Gets soup from URL using logged in selenium driver
         """
-        try:
-            self.driver.get(url)
-            return BeautifulSoup(self.driver.page_source, "html.parser")
-        except Exception as e:
-            raise ValueError(f"Error fetching page: {e}") from e
+        for attempt in range(1, max_attemps + 1):
+            try:
+                self.driver.get(url)
+                soup = BeautifulSoup(self.driver.page_source, "html.parser")
+                pre = soup.select_one("body > pre")
+                
+                if pre and "too many requests" in pre.text.lower():
+                    if attempt == max_attemps:
+                        raise RuntimeError(f"Max attempts reached for URL: {url}. Too many requests.")
+                    base = 2 ** attempt
+                    delay = base + random.uniform(-0.2 * base, 0.2 * base)
+                    print(f"[{attempt}/{max_attemps}] Too many requests. Retrying in {delay:.2f} seconds...")
+                    sleep(delay)
+                    continue
+
+                return soup
+            
+            except Exception as e:
+                raise RuntimeError(f"Error fetching page: {url}. Error: {e}")
+            
+        raise RuntimeError(f"Failed to fetch page after {max_attemps} attempts: {url}")
 
 
 def parse_args() -> argparse.Namespace:
