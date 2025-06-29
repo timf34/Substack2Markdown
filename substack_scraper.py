@@ -4,6 +4,7 @@ import os
 from abc import ABC, abstractmethod
 from typing import List, Optional, Tuple
 from time import sleep
+from datetime import datetime
 
 from bs4 import BeautifulSoup
 import html2text
@@ -19,6 +20,8 @@ from selenium.webdriver.edge.options import Options as EdgeOptions
 from selenium.webdriver.chrome.service import Service
 from urllib.parse import urlparse
 from config import EMAIL, PASSWORD
+from ebooklib import epub
+import shutil  # For robustly creating directories
 
 USE_PREMIUM: bool = False  # Set to True if you want to login to Substack and convert paid for posts
 BASE_SUBSTACK_URL: str = "https://www.thefitzwilliam.com/"  # Substack you want to convert to markdown
@@ -33,6 +36,45 @@ def extract_main_part(url: str) -> str:
     parts = urlparse(url).netloc.split('.')  # Parse the URL to get the netloc, and split on '.'
     return parts[1] if parts[0] == 'www' else parts[0]  # Return the main part of the domain, while ignoring 'www' if
     # present
+
+
+def format_substack_date(date_str: str) -> str:
+    """
+    Converts Substack date string (e.g., "Jan 1, 2023", "1 day ago", "1 hr ago") to YYYY-MM-DD format.
+    Returns original string if parsing fails.
+    """
+    if date_str == "Date not found":
+        return "Unknown Date"  # Or handle as an error, or return None
+
+    # Normalize common variations like "hours" to "hr"
+    date_str = date_str.replace(" hours", " hr").replace(" hour", " hr")
+    date_str = date_str.replace(" days", " day").replace(" day", " day")  # "1 day ago" is fine
+    date_str = date_str.replace(" minutes", " min").replace(" minute", " min")
+
+    try:
+        # Handle formats like "Jan 1, 2023"
+        dt_object = datetime.strptime(date_str, "%b %d, %Y")
+        return dt_object.strftime("%Y-%m-%d")
+    except ValueError:
+        # Handle relative dates like "1 day ago", "1 hr ago", "Mar 23" (assuming current year)
+        if "ago" in date_str or "hr" in date_str or "min" in date_str:  # simple handling for recent posts
+            # For "X days/hours/mins ago", approximate to today's date.
+            # More precise parsing would require libraries like `dateparser`
+            # or more complex logic to subtract the duration.
+            # For simplicity in this script, we'll use today's date.
+            return datetime.now().strftime("%Y-%m-%d")
+        try:
+            # Try parsing "Mar 23" (assuming current year if year is missing)
+            dt_object = datetime.strptime(date_str + f", {datetime.now().year}", "%b %d, %Y")
+            return dt_object.strftime("%Y-%m-%d")
+        except ValueError:
+            # Try parsing "YYYY-MM-DD" style dates if they already exist
+            try:
+                dt_object = datetime.strptime(date_str, "%Y-%m-%d")
+                return dt_object.strftime("%Y-%m-%d")  # Already in correct format
+            except ValueError:
+                print(f"Warning: Could not parse date string: '{date_str}'. Using original string.")
+                return date_str  # Fallback to original string if all parsing fails
 
 
 def generate_html_file(author_name: str) -> None:
@@ -177,7 +219,6 @@ class BaseSubstackScraper(ABC):
         """
         return markdown.markdown(md_content, extensions=['extra'])
 
-
     def save_to_html_file(self, filepath: str, content: str) -> None:
         """
         This method saves HTML content to a file with a link to an external CSS file.
@@ -257,12 +298,12 @@ class BaseSubstackScraper(ABC):
         subtitle_element = soup.select_one("h3.subtitle")
         subtitle = subtitle_element.text.strip() if subtitle_element else ""
 
-        
         date_element = soup.find(
             "div",
             class_="pencraft pc-reset color-pub-secondary-text-hGQ02T line-height-20-t4M0El font-meta-MWBumP size-11-NuY2Zx weight-medium-fw81nC transform-uppercase-yKDgcq reset-IxiVJZ meta-EgzBVA"
         )
-        date = date_element.text.strip() if date_element else "Date not found"
+        raw_date = date_element.text.strip() if date_element else "Date not found"
+        date = format_substack_date(raw_date)
 
         like_count_element = soup.select_one("a.post-ufi-button .label")
         like_count = (
@@ -295,6 +336,175 @@ class BaseSubstackScraper(ABC):
             essays_data = existing_data + [data for data in essays_data if data not in existing_data]
         with open(json_path, 'w', encoding='utf-8') as f:
             json.dump(essays_data, f, ensure_ascii=False, indent=4)
+
+    def create_epub_from_author_markdown(self, author_name: str, base_md_dir: str, base_html_dir: str,
+                                         json_data_dir: str) -> None:
+        """
+        Creates an EPUB file from the scraped markdown posts for a given author.
+
+        Args:
+            author_name: The name of the Substack author.
+            base_md_dir: The base directory where markdown files are stored.
+            base_html_dir: The base directory where HTML files are stored (unused in current EPUB logic but passed for consistency).
+            json_data_dir: The directory where JSON metadata files are stored.
+        """
+        print(f"Starting EPUB generation for {author_name}...")
+
+        json_path = os.path.join(json_data_dir, f'{author_name}.json')
+        if not os.path.exists(json_path):
+            print(f"Error: JSON data file not found for {author_name} at {json_path}. Cannot generate EPUB.")
+            return
+
+        with open(json_path, 'r', encoding='utf-8') as f:
+            posts_metadata = json.load(f)
+
+        if not posts_metadata:
+            print(f"No posts found in JSON data for {author_name}. EPUB will be empty.")
+            return
+
+        # Sort posts by date. Handles "Unknown Date" by placing them at the end or beginning based on preference.
+        # Here, 'Unknown Date' will cause an error if not handled before sorting.
+        # We will filter out entries with "Unknown Date" or handle them by assigning a placeholder date.
+        valid_posts = []
+        for post in posts_metadata:
+            if post.get('date') and post['date'] != "Unknown Date" and post['date'] != "Date not found":
+                try:
+                    # Ensure date is in a comparable format if it's already YYYY-MM-DD
+                    datetime.strptime(post['date'], "%Y-%m-%d")
+                    valid_posts.append(post)
+                except ValueError:
+                    print(
+                        f"Skipping post with invalid date format: {post.get('title', 'Unknown Title')} - {post.get('date')}")
+            else:
+                print(f"Skipping post with missing or unknown date: {post.get('title', 'Unknown Title')}")
+
+        # Sort posts by date, then by title as a secondary key if dates are the same
+        # The primary sort key is 'date'.
+        # If 'title' is missing, use a placeholder string.
+        sorted_posts = sorted(valid_posts, key=lambda x: (x['date'], x.get('title', '')))
+
+        book = epub.EpubBook()
+        book.set_identifier(f"urn:uuid:{author_name}-{datetime.now().timestamp()}")
+        book.set_title(f"{author_name.replace('_', ' ').title()} Substack Archive")
+        book.set_language("en")
+        book.add_author(author_name.replace('_', ' ').title())
+
+        # Define TOC and chapters list
+        chapters = []
+        toc = []
+
+        # Create a directory for EPUBs if it doesn't exist
+        epub_dir = "substack_epubs"
+        if not os.path.exists(epub_dir):
+            os.makedirs(epub_dir)
+
+        author_epub_dir = os.path.join(epub_dir, author_name)
+        if not os.path.exists(author_epub_dir):
+            os.makedirs(author_epub_dir)
+
+        epub_filename = os.path.join(author_epub_dir, f"{author_name}_substack_archive.epub")
+
+        # Default CSS for styling the EPUB content
+        default_css = epub.EpubItem(
+            uid="style_default",
+            file_name="style/default.css",
+            media_type="text/css",
+            content="""
+                body { font-family: serif; line-height: 1.6; }
+                h1, h2, h3, h4, h5, h6 { font-family: sans-serif; }
+                img { max-width: 100%; height: auto; }
+                pre { white-space: pre-wrap; word-wrap: break-word; background-color: #f4f4f4; padding: 10px; border-radius: 4px; }
+                code { font-family: monospace; }
+            """
+        )
+        book.add_item(default_css)
+
+        for i, post_meta in enumerate(sorted_posts):
+            md_filepath = post_meta.get("file_link")
+            if not md_filepath or not os.path.exists(md_filepath):
+                print(
+                    f"Warning: Markdown file not found for post: {post_meta.get('title', 'Unknown Title')}. Skipping.")
+                continue
+
+            with open(md_filepath, 'r', encoding='utf-8') as md_file:
+                markdown_content = md_file.read()
+
+            # Convert Markdown to HTML. The `markdown` library is already a dependency.
+            # We strip the existing metadata from the markdown content before converting to HTML for the EPUB body
+            # as EPUB will have its own metadata.
+            # A simple way to strip metadata is to find the first occurrence of "\n\n**Likes:**"
+            # and take content after that, or more robustly, find the end of the metadata block.
+            # For now, let's assume metadata is at the start and ends before the main content.
+            # A common pattern is that content starts after the second `\n\n` if there's a subtitle, or first if no subtitle.
+
+            # Crude removal of metadata from the top of the .md file
+            # Looks for the line with "Likes:**" and takes everything after it.
+            # This might need adjustment if the metadata format changes.
+            content_start_index = markdown_content.find("\n\n**Likes:**")
+            if content_start_index != -1:
+                # Find the end of the "Likes" line
+                end_of_likes_line = markdown_content.find("\n\n", content_start_index + len("\n\n**Likes:**"))
+                if end_of_likes_line != -1:
+                    actual_content_markdown = markdown_content[end_of_likes_line + 2:]  # +2 for the \n\n
+                else:  # If no further \n\n, assume rest is content
+                    actual_content_markdown = ""  # Or handle as error/skip
+            else:  # If "Likes" not found, assume no metadata or different format, use all content
+                actual_content_markdown = markdown_content
+
+            html_content = markdown.markdown(actual_content_markdown, extensions=['extra', 'meta'])
+
+            chapter_title = post_meta.get("title", f"Chapter {i + 1}")
+            # Sanitize filename for EPUB internal use
+            chapter_filename_sanitized = "".join(c if c.isalnum() else "_" for c in chapter_title[:50])
+            chapter_filename = f"chap_{i + 1}_{chapter_filename_sanitized}.xhtml"
+
+            # Create chapter
+            # Need to ensure html_content is bytes, not str.
+            # Also, title should be a string.
+            epub_chapter = epub.EpubHtml(title=str(chapter_title), file_name=chapter_filename, lang="en")
+
+            # Basic HTML structure for the chapter content
+            full_html_content = f"""<!DOCTYPE html>
+            <html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+            <head>
+                <meta charset="utf-8" />
+                <title>{str(chapter_title)}</title>
+                <link rel="stylesheet" type="text/css" href="style/default.css" />
+            </head>
+            <body>
+                <h1>{str(chapter_title)}</h1>
+                {html_content}
+            </body>
+            </html>"""
+
+            epub_chapter.content = full_html_content.encode('utf-8')  # Ensure content is bytes
+            epub_chapter.add_item(default_css)  # Link CSS to this chapter
+            book.add_item(epub_chapter)
+            chapters.append(epub_chapter)
+            toc.append(epub.Link(chapter_filename, str(chapter_title), f"chap_{i + 1}"))
+
+        # Define Table of Contents
+        book.toc = tuple(toc)
+
+        # Add default NCX and Nav file
+        book.add_item(epub.EpubNcx())
+        book.add_item(epub.EpubNav())
+
+        # Set the spine (order of chapters)
+        # The first item in spine is often the cover or title page, then Nav, then chapters.
+        # For simplicity, we'll just list the chapters.
+        # To include the Nav in the spine (as some readers prefer):
+        # book.spine = ['nav'] + chapters
+        # Or, if you have a cover:
+        # book.spine = ['cover', 'nav'] + chapters
+        # For now, just chapters:
+        book.spine = ['nav'] + chapters  # Nav should usually come first for navigation structure
+
+        try:
+            epub.write_epub(epub_filename, book, {})
+            print(f"Successfully generated EPUB: {epub_filename}")
+        except Exception as e:
+            print(f"Error writing EPUB file for {author_name}: {e}")
 
     def scrape_posts(self, num_posts_to_scrape: int = 0) -> None:
         """
@@ -339,6 +549,19 @@ class BaseSubstackScraper(ABC):
                 break
         self.save_essays_data_to_json(essays_data=essays_data)
         generate_html_file(author_name=self.writer_name)
+
+        # Call EPUB generation
+        # Need to pass the base directories, not the author-specific ones
+        # self.md_save_dir is like "substack_md_files/author_name"
+        # We need "substack_md_files"
+        parent_md_dir = os.path.dirname(self.md_save_dir)
+        parent_html_dir = os.path.dirname(self.html_save_dir)
+        self.create_epub_from_author_markdown(
+            author_name=self.writer_name,
+            base_md_dir=parent_md_dir,
+            base_html_dir=parent_html_dir,
+            json_data_dir=JSON_DATA_DIR
+        )
 
 
 class SubstackScraper(BaseSubstackScraper):
@@ -463,7 +686,7 @@ def parse_args() -> argparse.Namespace:
         "--headless",
         action="store_true",
         help="Include -h in command to run browser in headless mode when using the Premium Substack "
-        "Scraper.",
+             "Scraper.",
     )
     parser.add_argument(
         "--edge-path",
@@ -482,7 +705,7 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default="",
         help="Optional: Specify a custom user agent for selenium browser automation. Useful for "
-        "passing captcha in headless mode",
+             "passing captcha in headless mode",
     )
     parser.add_argument(
         "--html-directory",
