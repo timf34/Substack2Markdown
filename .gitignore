@@ -18,5 +18,6 @@ data/
 substack_html_pages/*
 !substack_html_pages/README.md
 
-# Ignore substack_md_files directory
-/substack_md_files/
+# Ignore markdown and EPUB directories
+#/substack_md_files/
+#/substack_epubs/
