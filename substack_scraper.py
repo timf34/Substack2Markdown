@@ -437,18 +437,30 @@ class BaseSubstackScraper(ABC):
             # For now, let's assume metadata is at the start and ends before the main content.
             # A common pattern is that content starts after the second `\n\n` if there's a subtitle, or first if no subtitle.
 
-            # Crude removal of metadata from the top of the .md file
-            # Looks for the line with "Likes:**" and takes everything after it.
-            # This might need adjustment if the metadata format changes.
-            content_start_index = markdown_content.find("\n\n**Likes:**")
-            if content_start_index != -1:
-                # Find the end of the "Likes" line
-                end_of_likes_line = markdown_content.find("\n\n", content_start_index + len("\n\n**Likes:**"))
+            # Revised logic to remove metadata from the top of the .md file
+            # Looks for the line containing "**Likes:**"
+            metadata_marker = "**Likes:**"
+            # Find the start of the metadata_marker, but be flexible with preceding newlines.
+            # We search for the marker that could be at the start of a line or after some text (like a date).
+            # A simple find should be okay if the marker is distinct enough.
+            likes_line_start_index = markdown_content.find(metadata_marker)
+
+            if likes_line_start_index != -1:
+                # Find the end of the line containing "**Likes:**"
+                # This is the position of the first newline character after the marker's occurrence.
+                end_of_likes_line = markdown_content.find("\n", likes_line_start_index + len(metadata_marker))
                 if end_of_likes_line != -1:
-                    actual_content_markdown = markdown_content[end_of_likes_line + 2:]  # +2 for the \n\n
-                else:  # If no further \n\n, assume rest is content
-                    actual_content_markdown = ""  # Or handle as error/skip
-            else:  # If "Likes" not found, assume no metadata or different format, use all content
+                    # Content starts after this newline.
+                    content_after_likes_line = markdown_content[end_of_likes_line + 1:]  # +1 to move past the \n
+                    # Strip leading whitespace (including newlines) from the extracted content
+                    actual_content_markdown = content_after_likes_line.lstrip()
+                else:
+                    # This case means "**Likes:**" was found, but it's the very last thing in the file (no newline after it).
+                    actual_content_markdown = ""
+            else:
+                # If "**Likes:**" is not found, assume no metadata or a different format;
+                # use all content. This part of the logic remains the same.
+                # This could happen if posts have no likes or the format changes.
                 actual_content_markdown = markdown_content
 
             html_content = markdown.markdown(actual_content_markdown, extensions=['extra', 'meta'])

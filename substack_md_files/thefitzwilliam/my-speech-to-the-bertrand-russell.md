@@ -2,9 +2,9 @@
 
 ## Henry George and the death of the land tax movement
 
-**Jun 09, 2025**
+**2025-06-09**
 
-**Likes:** 11
+**Likes:** 12
 
 _I was recently invited to give a talk at the annual[Bertrand Russell Conference](https://bertrandrussellsociety.org/), which is an academic gathering about all aspects of the life and thought of the philosopher [Bertrand Russell](https://en.wikipedia.org/wiki/Bertrand_Russell). This year, it was hosted by Western Kentucky University, but that’s rather far away, so I gave the talk over Zoom. At first, I wanted to speak about Russell’s time lecturing at the University of Peking in the 1920s, and how he intersected with debates about [Chinese language reform](https://en.wikipedia.org/wiki/Hu_Shih) and the translation efforts of the [New Culture Movement](https://en.wikipedia.org/wiki/New_Culture_Movement). But it turns out this topic has already been [relatively well covered elsewhere](https://www.tandfonline.com/doi/full/10.1080/10971467.2021.1917938). So, instead, I gave a presentation called “Henry George and the Role of a Land Tax in Bertrand Russell’s Political Thought”._
 
