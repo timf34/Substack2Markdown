@@ -20,13 +20,13 @@ from selenium.webdriver.chrome.service import Service
 from urllib.parse import urlparse
 from config import EMAIL, PASSWORD
 
-USE_PREMIUM: bool = False  # Set to True if you want to login to Substack and convert paid for posts
-BASE_SUBSTACK_URL: str = "https://www.thefitzwilliam.com/"  # Substack you want to convert to markdown
+USE_PREMIUM: bool = True  # Set to True if you want to login to Substack and convert paid for posts
+BASE_SUBSTACK_URL: str = "https://premSubstk.io/"  # Substack you want to convert to markdown
 BASE_MD_DIR: str = "substack_md_files"  # Name of the directory we'll save the .md essay files
 BASE_HTML_DIR: str = "substack_html_pages"  # Name of the directory we'll save the .html essay files
 HTML_TEMPLATE: str = "author_template.html"  # HTML template to use for the author page
 JSON_DATA_DIR: str = "data"
-NUM_POSTS_TO_SCRAPE: int = 3  # Set to 0 if you want all posts
+NUM_POSTS_TO_SCRAPE: int = 0  # Set to 0 if you want all posts
 
 
 def extract_main_part(url: str) -> str:
@@ -381,12 +381,14 @@ class PremiumSubstackScraper(BaseSubstackScraper):
         if user_agent:
             options.add_argument(f'user-agent={user_agent}')  # Pass this if running headless and blocked by captcha
 
-        if edge_driver_path:
-            service = Service(executable_path=edge_driver_path)
-        else:
-            service = Service(EdgeChromiumDriverManager().install())
+        # if edge_driver_path:
+        #     service = Service(executable_path=edge_driver_path)
+        # else:
+        #     service = Service(EdgeChromiumDriverManager().install())
 
-        self.driver = webdriver.Edge(service=service, options=options)
+        os.environ["SE_DRIVER_MIRROR_URL"] = "https://msedgedriver.microsoft.com"
+        self.driver = webdriver.Edge()
+        # self.driver = webdriver.Edge(service=service, options=options)
         self.login()
 
     def login(self) -> None:
