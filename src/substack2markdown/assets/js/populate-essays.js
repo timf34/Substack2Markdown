@@ -19,7 +19,7 @@ function populateEssays(data) {
     const essaysContainer = document.getElementById('essays-container');
     const list = data.map(essay => `
         <li>
-            <a href="../${showHTML ? essay.html_link : essay.file_link}" target="_blank">${essay.title}</a>
+            <a href="${showHTML ? essay.html_link : essay.file_link}">${essay.title}</a>
             <div class="subtitle">${essay.subtitle}</div>
             <div class="metadata">${essay.like_count} Likes - ${essay.date}</div>
         </li>
