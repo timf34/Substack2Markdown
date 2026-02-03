@@ -29,8 +29,8 @@ specify them as command line arguments.
 Clone the repo and install the dependencies:
 
 ```bash
-git clone https://github.com/yourusername/substack_scraper.git
-cd substack_scraper
+git clone https://github.com/yourusername/Substack2Markdown.git
+cd Substack2Markdown
 
 # # Optinally create a virtual environment
 # python -m venv venv
