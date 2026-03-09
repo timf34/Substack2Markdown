@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import random
 from abc import ABC, abstractmethod
 from typing import List, Optional, Tuple
 from time import sleep
@@ -374,19 +375,36 @@ class SubstackScraper(BaseSubstackScraper):
     def __init__(self, base_substack_url: str, md_save_dir: str, html_save_dir: str):
         super().__init__(base_substack_url, md_save_dir, html_save_dir)
 
-    def get_url_soup(self, url: str) -> Optional[BeautifulSoup]:
+    def get_url_soup(self, url: str, max_attempts: int = 5) -> Optional[BeautifulSoup]:
         """
-        Gets soup from URL using requests
+        Gets soup from URL using requests, with retry on rate limiting.
         """
-        try:
-            page = requests.get(url, headers=None)
-            soup = BeautifulSoup(page.content, "html.parser")
-            if soup.find("h2", class_="paywall-title"):
-                print(f"Skipping premium article: {url}")
-                return None
-            return soup
-        except Exception as e:
-            raise ValueError(f"Error fetching page: {e}") from e
+        for attempt in range(1, max_attempts + 1):
+            try:
+                page = requests.get(url, headers=None)
+                soup = BeautifulSoup(page.content, "html.parser")
+
+                if soup.find("h2", class_="paywall-title"):
+                    print(f"Skipping premium article: {url}")
+                    return None
+
+                pre = soup.select_one("body > pre")
+                if pre and "too many requests" in pre.text.lower():
+                    if attempt == max_attempts:
+                        raise RuntimeError(f"Max attempts reached for URL: {url}. Too many requests.")
+                    base = 2 ** attempt
+                    delay = base + random.uniform(-0.2 * base, 0.2 * base)
+                    print(f"[{attempt}/{max_attempts}] Too many requests. Retrying in {delay:.2f} seconds...")
+                    sleep(delay)
+                    continue
+
+                return soup
+            except RuntimeError:
+                raise
+            except Exception as e:
+                raise ValueError(f"Error fetching page: {e}") from e
+
+        raise RuntimeError(f"Failed to fetch page after {max_attempts} attempts: {url}")
 
 
 class PremiumSubstackScraper(BaseSubstackScraper):
@@ -481,15 +499,32 @@ class PremiumSubstackScraper(BaseSubstackScraper):
         error_container = self.driver.find_elements(By.ID, 'error-container')
         return len(error_container) > 0 and error_container[0].is_displayed()
 
-    def get_url_soup(self, url: str) -> BeautifulSoup:
+    def get_url_soup(self, url: str, max_attempts: int = 5) -> BeautifulSoup:
         """
-        Gets soup from URL using logged in selenium driver
+        Gets soup from URL using logged in selenium driver, with retry on rate limiting.
         """
-        try:
-            self.driver.get(url)
-            return BeautifulSoup(self.driver.page_source, "html.parser")
-        except Exception as e:
-            raise ValueError(f"Error fetching page: {e}") from e
+        for attempt in range(1, max_attempts + 1):
+            try:
+                self.driver.get(url)
+                soup = BeautifulSoup(self.driver.page_source, "html.parser")
+
+                pre = soup.select_one("body > pre")
+                if pre and "too many requests" in pre.text.lower():
+                    if attempt == max_attempts:
+                        raise RuntimeError(f"Max attempts reached for URL: {url}. Too many requests.")
+                    base = 2 ** attempt
+                    delay = base + random.uniform(-0.2 * base, 0.2 * base)
+                    print(f"[{attempt}/{max_attempts}] Too many requests. Retrying in {delay:.2f} seconds...")
+                    sleep(delay)
+                    continue
+
+                return soup
+            except RuntimeError:
+                raise
+            except Exception as e:
+                raise ValueError(f"Error fetching page: {url}. Error: {e}") from e
+
+        raise RuntimeError(f"Failed to fetch page after {max_attempts} attempts: {url}")
 
 
 def parse_args() -> argparse.Namespace:
