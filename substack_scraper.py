@@ -261,12 +261,12 @@ class BaseSubstackScraper(ABC):
         title = title_element.text.strip() if title_element else "Untitled"
 
         # Subtitle
-        subtitle_element = soup.select_one("h3.subtitle")
+        subtitle_element = soup.select_one("h3.subtitle, div.subtitle-HEEcLo")
         subtitle = subtitle_element.text.strip() if subtitle_element else ""
 
         # Date — try CSS selector first
         date = ""
-        date_element = soup.select_one("div.pencraft.pc-reset.color-pub-secondary-text-hGQ02T")
+        date_element = soup.select_one("div.meta-EgzBVA")
         if date_element and date_element.text.strip():
             date = date_element.text.strip()
 
@@ -287,7 +287,7 @@ class BaseSubstackScraper(ABC):
             date = "Date not found"
 
         # Like count
-        like_count_element = soup.select_one("a.post-ufi-button .label")
+        like_count_element = soup.select_one('div.like-button-container button div.label')
         like_count = (
             like_count_element.text.strip()
             if like_count_element and like_count_element.text.strip().isdigit()
