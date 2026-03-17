@@ -20,3 +20,6 @@ substack_html_pages/*
 
 # Ignore substack_md_files directory
 /substack_md_files/
+
+# Ignore downloaded image assets
+substack_images/
