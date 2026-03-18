@@ -22,6 +22,8 @@ specify them as command line arguments.
 - Converts Substack posts into Markdown files.
 - Generates an HTML file to browse Markdown files.
 - Supports free and premium content (with subscription).
+- Supports scraping a single post URL directly (for example, `/p/my-post`).
+- Can download Substack-hosted images locally with `--images`.
 - The HTML interface allows sorting essays by date or likes.
 
 ## Installation
@@ -69,6 +71,18 @@ For premium Substack sites:
 
 ```bash
 python substack_scraper.py --url https://example.substack.com --directory /path/to/save/posts --premium
+```
+
+To scrape a single post directly:
+
+```bash
+python substack_scraper.py --url https://example.substack.com/p/my-post
+```
+
+To download images locally and rewrite markdown image links:
+
+```bash
+python substack_scraper.py --url https://example.substack.com --images
 ```
 
 To scrape a specific number of posts:

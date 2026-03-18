@@ -1,5 +1,7 @@
 import argparse
+import hashlib
 import json
+import mimetypes
 import os
 import random
 import re
@@ -7,6 +9,8 @@ import shutil
 import subprocess
 import sys
 from abc import ABC, abstractmethod
+from pathlib import Path
+from urllib.parse import unquote, urlparse
 from typing import List, Optional, Tuple
 from time import sleep
 
@@ -32,13 +36,112 @@ USE_PREMIUM: bool = True
 BASE_SUBSTACK_URL: str = "https://niallferguson.substack.com/"
 BASE_MD_DIR: str = "substack_md_files"
 BASE_HTML_DIR: str = "substack_html_pages"
+BASE_IMAGE_DIR: str = "substack_images"
 HTML_TEMPLATE: str = "author_template.html"
 JSON_DATA_DIR: str = "data"
 NUM_POSTS_TO_SCRAPE: int = 0
 
 
+def resolve_image_url(url: str) -> str:
+    """Get the original image URL from a Substack CDN URL."""
+    if url.startswith("https://substackcdn.com/image/fetch/"):
+        parts = url.split("/https%3A%2F%2F")
+        if len(parts) > 1:
+            url = "https://" + unquote(parts[1])
+    return url
+
+
+def clean_linked_images(md_content: str) -> str:
+    """Converts markdown linked images [![alt](img)](link) to ![alt](img)."""
+    pattern = r'\[!\[(.*?)\]\((.*?)\)\]\(.*?\)'
+    return re.sub(pattern, r'![\1](\2)', md_content)
+
+
+def count_images_in_markdown(md_content: str) -> int:
+    """Count number of image references in markdown content."""
+    cleaned_content = clean_linked_images(md_content)
+    pattern = r'!\[.*?\]\((.*?)\)'
+    matches = re.findall(pattern, cleaned_content)
+    return len(matches)
+
+
+def is_post_url(url: str) -> bool:
+    """Check if URL points to a specific post (contains /p/)."""
+    return "/p/" in url
+
+
+def get_publication_url(url: str) -> str:
+    """Extract the base publication URL from a post URL."""
+    parsed = urlparse(url)
+    return f"{parsed.scheme}://{parsed.netloc}/"
+
+
+def get_post_slug(url: str) -> str:
+    """Extract the post slug from a Substack post URL."""
+    match = re.search(r'/p/([^/]+)', url)
+    return match.group(1) if match else 'unknown_post'
+
+
+def sanitize_image_filename(url: str) -> str:
+    """Create a safe filename from an image URL."""
+    url = resolve_image_url(url)
+    filename = url.split("/")[-1]
+    filename = filename.split("?")[0]
+    filename = re.sub(r'[<>:"/\\|?*]', '', filename)
+
+    if len(filename) > 100 or not filename:
+        hash_object = hashlib.md5(url.encode())
+        ext = mimetypes.guess_extension(
+            requests.head(url).headers.get('content-type', '')
+        ) or '.jpg'
+        filename = f"{hash_object.hexdigest()}{ext}"
+
+    return filename
+
+
+def download_image(url: str, save_path: Path, pbar=None) -> Optional[str]:
+    """Download image from URL and save to path."""
+    try:
+        response = requests.get(url, stream=True)
+        if response.status_code == 200:
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(save_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+            if pbar:
+                pbar.update(1)
+            return str(save_path)
+    except Exception as e:
+        msg = f"Error downloading image {url}: {str(e)}"
+        if pbar:
+            pbar.write(msg)
+        else:
+            print(msg)
+    return None
+
+
+def process_markdown_images(md_content: str, author: str, post_slug: str, pbar=None) -> str:
+    """Process markdown content to download images and update references."""
+    image_dir = Path(BASE_IMAGE_DIR) / author / post_slug
+    md_content = clean_linked_images(md_content)
+
+    def replace_image(match):
+        url = match.group(0).strip('()')
+        resolved_url = resolve_image_url(url)
+        filename = sanitize_image_filename(url)
+        save_path = image_dir / filename
+        if not save_path.exists():
+            download_image(resolved_url, save_path, pbar)
+
+        rel_path = os.path.relpath(save_path, Path(BASE_MD_DIR) / author)
+        return f"({rel_path})"
+
+    pattern = r'\(https://substackcdn\.com/image/fetch/[^\s\)]+\)'
+    return re.sub(pattern, replace_image, md_content)
+
+
 def extract_main_part(url: str) -> str:
-    from urllib.parse import urlparse
     parts = urlparse(url).netloc.split('.')
     return parts[1] if parts[0] == 'www' else parts[0]
 
@@ -623,7 +726,20 @@ class BrowserManager:
 # =============================================================================
 
 class BaseSubstackScraper(ABC):
-    def __init__(self, base_substack_url: str, md_save_dir: str, html_save_dir: str):
+    def __init__(
+        self,
+        base_substack_url: str,
+        md_save_dir: str,
+        html_save_dir: str,
+        download_images: bool = False,
+    ):
+        self.is_single_post: bool = is_post_url(base_substack_url)
+        self.post_slug: Optional[str] = get_post_slug(base_substack_url) if self.is_single_post else None
+        original_url = base_substack_url
+
+        if self.is_single_post:
+            base_substack_url = get_publication_url(base_substack_url)
+
         if not base_substack_url.endswith("/"):
             base_substack_url += "/"
         self.base_substack_url: str = base_substack_url
@@ -641,8 +757,14 @@ class BaseSubstackScraper(ABC):
             os.makedirs(self.html_save_dir)
             print(f"Created html directory {self.html_save_dir}")
 
-        self.keywords: List[str] = ["about", "archive", "podcast"]
-        self.post_urls: List[str] = self.get_all_post_urls()
+        self.download_images: bool = download_images
+        self.image_dir = Path(BASE_IMAGE_DIR) / self.writer_name
+
+        if self.is_single_post:
+            self.post_urls: List[str] = [original_url]
+        else:
+            self.keywords: List[str] = ["about", "archive", "podcast"]
+            self.post_urls: List[str] = self.get_all_post_urls()
 
     def get_all_post_urls(self) -> List[str]:
         """Attempts to fetch URLs from sitemap.xml, falling back to feed.xml if necessary."""
@@ -845,39 +967,55 @@ class BaseSubstackScraper(ABC):
         essays_data = []
         count = 0
         total = num_posts_to_scrape if num_posts_to_scrape != 0 else len(self.post_urls)
-        for url in tqdm(self.post_urls, total=total):
-            try:
-                md_filename = self.get_filename_from_url(url, filetype=".md")
-                html_filename = self.get_filename_from_url(url, filetype=".html")
-                md_filepath = os.path.join(self.md_save_dir, md_filename)
-                html_filepath = os.path.join(self.html_save_dir, html_filename)
+        with tqdm(total=total, desc="Scraping posts") as pbar:
+            for url in self.post_urls:
+                try:
+                    md_filename = self.get_filename_from_url(url, filetype=".md")
+                    html_filename = self.get_filename_from_url(url, filetype=".html")
+                    md_filepath = os.path.join(self.md_save_dir, md_filename)
+                    html_filepath = os.path.join(self.html_save_dir, html_filename)
 
-                if not os.path.exists(md_filepath):
-                    soup = self.get_url_soup(url)
-                    if soup is None:
-                        total += 1
-                        continue
-                    title, subtitle, like_count, date, md = self.extract_post_data(soup)
-                    self.save_to_file(md_filepath, md)
+                    if not os.path.exists(md_filepath):
+                        soup = self.get_url_soup(url)
+                        if soup is None:
+                            total += 1
+                            pbar.total = total
+                            pbar.refresh()
+                            continue
 
-                    html_content = self.md_to_html(md)
-                    self.save_to_html_file(html_filepath, html_content)
+                        title, subtitle, like_count, date, md = self.extract_post_data(soup)
 
-                    essays_data.append({
-                        "title": title,
-                        "subtitle": subtitle,
-                        "like_count": like_count,
-                        "date": date,
-                        "file_link": md_filepath,
-                        "html_link": html_filepath
-                    })
-                else:
-                    print(f"File already exists: {md_filepath}")
-            except Exception as e:
-                print(f"Error scraping post: {e}")
-            count += 1
-            if num_posts_to_scrape != 0 and count == num_posts_to_scrape:
-                break
+                        if self.download_images:
+                            total_images = count_images_in_markdown(md)
+                            slug = get_post_slug(url) if is_post_url(url) else url.rstrip('/').split('/')[-1]
+                            with tqdm(
+                                total=total_images,
+                                desc=f"Downloading images for {slug}",
+                                leave=False,
+                            ) as img_pbar:
+                                md = process_markdown_images(md, self.writer_name, slug, img_pbar)
+
+                        self.save_to_file(md_filepath, md)
+                        html_content = self.md_to_html(md)
+                        self.save_to_html_file(html_filepath, html_content)
+
+                        essays_data.append({
+                            "title": title,
+                            "subtitle": subtitle,
+                            "like_count": like_count,
+                            "date": date,
+                            "file_link": md_filepath,
+                            "html_link": html_filepath
+                        })
+                    else:
+                        pbar.write(f"File already exists: {md_filepath}")
+                except Exception as e:
+                    pbar.write(f"Error scraping post: {e}")
+
+                count += 1
+                pbar.update(1)
+                if num_posts_to_scrape != 0 and count == num_posts_to_scrape:
+                    break
         self.save_essays_data_to_json(essays_data=essays_data)
         generate_html_file(author_name=self.writer_name)
 
@@ -887,8 +1025,14 @@ class BaseSubstackScraper(ABC):
 # =============================================================================
 
 class SubstackScraper(BaseSubstackScraper):
-    def __init__(self, base_substack_url: str, md_save_dir: str, html_save_dir: str):
-        super().__init__(base_substack_url, md_save_dir, html_save_dir)
+    def __init__(
+        self,
+        base_substack_url: str,
+        md_save_dir: str,
+        html_save_dir: str,
+        download_images: bool = False,
+    ):
+        super().__init__(base_substack_url, md_save_dir, html_save_dir, download_images)
 
     def get_url_soup(self, url: str, max_attempts: int = 5) -> Optional[BeautifulSoup]:
         """Gets soup from URL using requests, with retry on rate limiting."""
@@ -930,6 +1074,7 @@ class PremiumSubstackScraper(BaseSubstackScraper):
         base_substack_url: str,
         md_save_dir: str,
         html_save_dir: str,
+        download_images: bool = False,
         browser: str = 'chrome',
         headless: bool = False,
         driver_path: str = '',
@@ -973,8 +1118,8 @@ class PremiumSubstackScraper(BaseSubstackScraper):
             # Navigate to substack to verify we're logged in
             self.driver.get(base_substack_url)
             sleep(3)
-        
-        super().__init__(base_substack_url, md_save_dir, html_save_dir)
+
+        super().__init__(base_substack_url, md_save_dir, html_save_dir, download_images)
 
     def login(self) -> None:
         """Log into Substack using Selenium."""
@@ -1096,6 +1241,11 @@ Examples:
         "-n", "--number", type=int, default=0,
         help="Number of posts to scrape (0 = all posts)."
     )
+    parser.add_argument(
+        "--images",
+        action="store_true",
+        help="Download images and update markdown to use local paths."
+    )
     
     # Premium scraping options
     premium_group = parser.add_argument_group('Premium scraping options')
@@ -1169,6 +1319,7 @@ def main():
                 base_substack_url=args.url,
                 md_save_dir=args.directory,
                 html_save_dir=args.html_directory,
+                download_images=args.images,
                 browser=args.browser,
                 headless=args.headless,
                 driver_path=driver_path,
@@ -1181,7 +1332,8 @@ def main():
             scraper = SubstackScraper(
                 args.url,
                 md_save_dir=args.directory,
-                html_save_dir=args.html_directory
+                html_save_dir=args.html_directory,
+                download_images=args.images,
             )
         scraper.scrape_posts(args.number)
 
@@ -1192,6 +1344,7 @@ def main():
                 base_substack_url=BASE_SUBSTACK_URL,
                 md_save_dir=args.directory,
                 html_save_dir=args.html_directory,
+                download_images=args.images,
                 browser=args.browser,
                 headless=args.headless,
                 driver_path=driver_path,
@@ -1204,7 +1357,8 @@ def main():
             scraper = SubstackScraper(
                 base_substack_url=BASE_SUBSTACK_URL,
                 md_save_dir=args.directory,
-                html_save_dir=args.html_directory
+                html_save_dir=args.html_directory,
+                download_images=args.images,
             )
         scraper.scrape_posts(num_posts_to_scrape=NUM_POSTS_TO_SCRAPE)
 
