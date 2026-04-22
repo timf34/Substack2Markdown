@@ -91,6 +91,13 @@ To scrape a specific number of posts:
 python substack_scraper.py --url https://example.substack.com --directory /path/to/save/posts --number 5
 ```
 
+To emit YAML frontmatter (title/subtitle/date/author/image) suitable for MDX sites
+instead of the default `# title` / `**Likes:** N` header:
+
+```bash
+python substack_scraper.py --url https://example.substack.com --frontmatter mdx
+```
+
 ### Online Version
 
 For a hassle-free experience without any local setup:

@@ -734,7 +734,11 @@ class BaseSubstackScraper(ABC):
         md_save_dir: str,
         html_save_dir: str,
         download_images: bool = False,
+        frontmatter_format: str = "legacy",
     ):
+        if frontmatter_format not in ("legacy", "mdx"):
+            raise ValueError("frontmatter_format must be 'legacy' or 'mdx'")
+        self.frontmatter_format: str = frontmatter_format
         self.is_single_post: bool = is_post_url(base_substack_url)
         self.post_slug: Optional[str] = get_post_slug(base_substack_url) if self.is_single_post else None
         original_url = base_substack_url
@@ -883,31 +887,65 @@ class BaseSubstackScraper(ABC):
         return url.split("/")[-1] + filetype
 
     @staticmethod
-    def combine_metadata_and_content(title: str, subtitle: str, date: str, author: str, cover_image: str, content) -> str:
-        """Combines the title, subtitle, and content into a single string with MDX frontmatter."""
+    def combine_metadata_and_content(
+        title: str,
+        subtitle: str,
+        date: str,
+        author: str,
+        cover_image: str,
+        like_count: str,
+        content: str,
+        frontmatter_format: str = "legacy",
+    ) -> str:
+        """Combines metadata and content using the selected frontmatter format.
+
+        Args:
+            date: ISO date string (``YYYY-MM-DD``) or the literal ``"Date not found"``.
+            frontmatter_format: ``"mdx"`` for YAML frontmatter, ``"legacy"`` for the
+                original ``# title`` / ``**date**`` / ``**Likes:** N`` header.
+        """
         if not isinstance(title, str):
             raise ValueError("title must be a string")
         if not isinstance(content, str):
             raise ValueError("content must be a string")
 
-        safe_title = title.replace('"', '\\"')
-        safe_subtitle = subtitle.replace('"', '\\"') if subtitle else ""
-        safe_author = author.replace('"', '\\"') if author else ""
+        if frontmatter_format == "mdx":
+            safe_title = title.replace('"', '\\"')
+            safe_subtitle = subtitle.replace('"', '\\"') if subtitle else ""
+            safe_author = author.replace('"', '\\"') if author else ""
 
-        frontmatter = '---\n'
-        frontmatter += f'title: "{safe_title}"\n'
-        if safe_subtitle:
-            frontmatter += f'subtitle: "{safe_subtitle}"\n'
-        frontmatter += f'date: "{date}"\n'
-        frontmatter += f'author: "{safe_author}"\n'
-        if cover_image:
-            frontmatter += f'image: "{cover_image}"\n'
-        frontmatter += '---\n\n'
+            frontmatter = '---\n'
+            frontmatter += f'title: "{safe_title}"\n'
+            if safe_subtitle:
+                frontmatter += f'subtitle: "{safe_subtitle}"\n'
+            frontmatter += f'date: "{date}"\n'
+            frontmatter += f'author: "{safe_author}"\n'
+            if cover_image:
+                frontmatter += f'image: "{cover_image}"\n'
+            frontmatter += '---\n\n'
+            return frontmatter + content
 
-        return frontmatter + content
+        # legacy format
+        display_date = date
+        if date and date != "Date not found":
+            try:
+                display_date = datetime.fromisoformat(date).strftime("%b %d, %Y")
+            except ValueError:
+                pass
 
-    def extract_post_data(self, soup: BeautifulSoup, url: str = "") -> Tuple[str, str, str, str, str, str]:
-        """Converts a Substack post soup to markdown, returning (title, subtitle, author, date, cover_image, md_content)."""
+        metadata = f"# {title}\n\n"
+        if subtitle:
+            metadata += f"## {subtitle}\n\n"
+        metadata += f"**{display_date}**\n\n"
+        metadata += f"**Likes:** {like_count}\n\n"
+        return metadata + content
+
+    def extract_post_data(self, soup: BeautifulSoup, url: str = "") -> Tuple[str, str, str, str, str, str, str]:
+        """Converts a Substack post soup to markdown.
+
+        Returns:
+            ``(title, subtitle, author, date, cover_image, like_count, md_content)``.
+        """
         # Title
         title_element = soup.select_one("h1.post-title, h2")
         title = title_element.text.strip() if title_element else "Untitled"
@@ -948,6 +986,14 @@ class BaseSubstackScraper(ABC):
         if not date:
             date = "Date not found"
 
+        # Like count
+        like_count_element = soup.select_one('div.like-button-container button div.label')
+        like_count = (
+            like_count_element.text.strip()
+            if like_count_element and like_count_element.text.strip().isdigit()
+            else "0"
+        )
+
         # Content
         content_element = soup.select_one("div.available-content")
         content_html = str(content_element) if content_element else ""
@@ -974,9 +1020,11 @@ class BaseSubstackScraper(ABC):
             except Exception as dump_err:
                 print(f"  failed to dump debug HTML: {dump_err}")
 
-        md_content = self.combine_metadata_and_content(title, subtitle, date, author, cover_image, md)
+        md_content = self.combine_metadata_and_content(
+            title, subtitle, date, author, cover_image, like_count, md, self.frontmatter_format
+        )
 
-        return title, subtitle, author, date, cover_image, md_content
+        return title, subtitle, author, date, cover_image, like_count, md_content
 
     @abstractmethod
     def get_url_soup(self, url: str) -> str:
@@ -1017,7 +1065,7 @@ class BaseSubstackScraper(ABC):
                             pbar.refresh()
                             continue
 
-                        title, subtitle, author, date, cover_image, md = self.extract_post_data(soup, url)
+                        title, subtitle, author, date, cover_image, like_count, md = self.extract_post_data(soup, url)
 
                         # Skip writing if extraction clearly failed — leaves no stale file so reruns retry.
                         content_element = soup.select_one("div.available-content")
@@ -1049,6 +1097,7 @@ class BaseSubstackScraper(ABC):
                             "author": author,
                             "date": date,
                             "cover_image": cover_image,
+                            "like_count": like_count,
                             "file_link": md_filepath,
                             "html_link": html_filepath
                         })
@@ -1076,8 +1125,11 @@ class SubstackScraper(BaseSubstackScraper):
         md_save_dir: str,
         html_save_dir: str,
         download_images: bool = False,
+        frontmatter_format: str = "legacy",
     ):
-        super().__init__(base_substack_url, md_save_dir, html_save_dir, download_images)
+        super().__init__(
+            base_substack_url, md_save_dir, html_save_dir, download_images, frontmatter_format
+        )
 
     def get_url_soup(self, url: str, max_attempts: int = 5) -> Optional[BeautifulSoup]:
         """Gets soup from URL using requests, with retry on rate limiting."""
@@ -1127,6 +1179,7 @@ class PremiumSubstackScraper(BaseSubstackScraper):
         user_agent: str = '',
         use_persistent_profile: bool = False,
         skip_login: bool = False,
+        frontmatter_format: str = "legacy",
     ) -> None:
         """
         Initialize the premium scraper with browser automation.
@@ -1164,7 +1217,9 @@ class PremiumSubstackScraper(BaseSubstackScraper):
             self.driver.get(base_substack_url)
             sleep(3)
 
-        super().__init__(base_substack_url, md_save_dir, html_save_dir, download_images)
+        super().__init__(
+            base_substack_url, md_save_dir, html_save_dir, download_images, frontmatter_format
+        )
 
     def login(self) -> None:
         """Log into Substack using Selenium."""
@@ -1306,6 +1361,12 @@ Examples:
         action="store_true",
         help="Download images and update markdown to use local paths."
     )
+    parser.add_argument(
+        "--frontmatter", type=str, default="legacy", choices=["legacy", "mdx"],
+        help="Header format for scraped markdown. 'legacy' (default) uses the original "
+             "'# title / **date** / **Likes:** N' block. 'mdx' emits YAML frontmatter "
+             "(title, subtitle, date, author, image) suitable for MDX sites."
+    )
     
     # Premium scraping options
     premium_group = parser.add_argument_group('Premium scraping options')
@@ -1387,6 +1448,7 @@ def main():
                 user_agent=args.user_agent,
                 use_persistent_profile=args.persistent_profile,
                 skip_login=args.skip_login,
+                frontmatter_format=args.frontmatter,
             )
         else:
             scraper = SubstackScraper(
@@ -1394,6 +1456,7 @@ def main():
                 md_save_dir=args.directory,
                 html_save_dir=args.html_directory,
                 download_images=args.images,
+                frontmatter_format=args.frontmatter,
             )
         scraper.scrape_posts(args.number)
 
@@ -1412,6 +1475,7 @@ def main():
                 user_agent=args.user_agent,
                 use_persistent_profile=args.persistent_profile,
                 skip_login=args.skip_login,
+                frontmatter_format=args.frontmatter,
             )
         else:
             scraper = SubstackScraper(
@@ -1419,6 +1483,7 @@ def main():
                 md_save_dir=args.directory,
                 html_save_dir=args.html_directory,
                 download_images=args.images,
+                frontmatter_format=args.frontmatter,
             )
         scraper.scrape_posts(num_posts_to_scrape=NUM_POSTS_TO_SCRAPE)
 
