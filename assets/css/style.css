@@ -1,18 +1,27 @@
+:root {
+    --print_pop: #ff6719;
+    --print_pop_darken: #e45a13;
+    --print_on_web_bg_color: #363737;
+    --print_secondary_on_web_bg_color: #868787;
+    --background_contrast_1: #f6f5f2;
+}
+
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: 'Spectral', Georgia, 'Times New Roman', serif;
     margin: 0;
     padding: 0;
-    background-color: rgba(249, 245, 228, 0.51);
-    color: #333;
+    background-color: #ffffff;
+    color: var(--print_on_web_bg_color);
+    -webkit-font-smoothing: antialiased;
 }
 
 h1 {
     padding: 20px;
     text-align: center;
-    margin-bottom: 20px;
+    margin: 0 0 20px;
     font-size: 2.5em;
-    margin: 0;
-    color: #333;
+    font-weight: 700;
+    color: var(--print_on_web_bg_color);
 }
 
 #essays-container {
@@ -35,23 +44,28 @@ h1 {
 }
 
 #essays-container li a {
-    color: #000;
+    color: var(--print_on_web_bg_color);
     text-decoration: none;
-    font-size: 24px;
-    font-weight: bold;
+    font-size: 22px;
+    font-weight: 700;
     display: block;
 }
 
+#essays-container li a:hover {
+    color: var(--print_pop);
+    text-decoration: underline;
+}
+
 #essays-container li .subtitle {
-    color: #555;
-    font-size: 18px;
-    margin: 10px 0;
-    font-weight: normal;
+    color: var(--print_secondary_on_web_bg_color);
+    font-size: 17px;
+    margin: 8px 0;
+    font-weight: 400;
 }
 
 #essays-container li .metadata {
-    color: #888;
-    font-size: 16px;
+    color: var(--print_secondary_on_web_bg_color);
+    font-size: 14px;
     margin-bottom: 5px;
     font-style: normal;
 }
@@ -63,19 +77,21 @@ h1 {
 }
 
 button {
-    background-color: #cbd2f5;
+    background-color: var(--print_pop);
     border: none;
-    color: white;
+    color: #ffffff;
     padding: 10px 20px;
     text-align: center;
     text-decoration: none;
     display: inline-block;
-    font-size: 16px;
+    font-family: 'Spectral', Georgia, 'Times New Roman', serif;
+    font-size: 15px;
+    font-weight: 600;
     margin: 4px 2px;
     cursor: pointer;
     border-radius: 4px;
 }
 
 button:hover {
-    background-color: #a7b2e1;
+    background-color: var(--print_pop_darken);
 }

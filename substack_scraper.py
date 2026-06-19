@@ -384,6 +384,224 @@ def md_to_html_static(md_content: str) -> str:
     return markdown.markdown(md_content, extensions=['extra'])
 
 
+# =============================================================================
+# STRUCTURED HEADER RENDERING (classic Substack article look)
+# =============================================================================
+
+def _format_header_date(date_str: str) -> str:
+    """Format an ISO date (``YYYY-MM-DD``) for display in the byline.
+
+    Falls back to the raw string (including the sentinel ``"Date not found"``).
+    Mirrors the legacy header date formatting in ``combine_metadata_and_content``.
+    """
+    if not date_str:
+        return ""
+    try:
+        return datetime.fromisoformat(date_str).strftime("%b %d, %Y")
+    except ValueError:
+        return date_str
+
+
+def build_post_header(meta: dict) -> str:
+    """Render a Substack-style centered post header from structured metadata.
+
+    ``meta`` is a dict that may contain: ``title``, ``subtitle``, ``author``,
+    ``date`` (ISO ``YYYY-MM-DD``), ``cover_image``. Any missing/empty field is
+    simply omitted. Returns an HTML string for a ``<header class="post-header">``
+    block, or ``""`` if there is nothing to render (no title, subtitle, author
+    or date). The cover image is shown above the title when present.
+    """
+    if not isinstance(meta, dict) or not meta:
+        return ""
+
+    cover_image = (meta.get("cover_image") or "").strip()
+    title = (meta.get("title") or "").strip()
+    subtitle = (meta.get("subtitle") or "").strip()
+    author = (meta.get("author") or "").strip()
+    date_str = (meta.get("date") or "").strip()
+
+    if not (title or subtitle or author or date_str):
+        return ""
+
+    parts = []
+    if cover_image:
+        parts.append(
+            f'<img class="post-cover" src="{_html_escape(cover_image)}" alt="" loading="eager">'
+        )
+    if title:
+        parts.append(f'<h1 class="post-title">{_html_escape(title)}</h1>')
+    if subtitle:
+        parts.append(f'<h3 class="post-subtitle">{_html_escape(subtitle)}</h3>')
+
+    byline_bits = []
+    if author:
+        byline_bits.append(_html_escape(author))
+    display_date = _format_header_date(date_str)
+    if display_date:
+        byline_bits.append(_html_escape(display_date))
+    if byline_bits:
+        parts.append(
+            f'<p class="post-byline">{" · ".join(byline_bits)}</p>'
+        )
+
+    return f'<header class="post-header">{"".join(parts)}</header>'
+
+
+def split_metadata_and_body(md_content: str, frontmatter_format: str = "legacy") -> Tuple[dict, str]:
+    """Inverse of ``combine_metadata_and_content``: recover metadata + body.
+
+    Used by ``render_posts.py`` to re-render on-disk markdown into the structured
+    Substack look without re-scraping. Returns ``(meta_dict, body_md)`` where
+    ``meta_dict`` has keys ``title``, ``subtitle``, ``author``, ``date``,
+    ``cover_image``, and ``like_count`` (any that aren't found are absent).
+
+    - ``mdx``: strip the leading YAML frontmatter (``---\\n…\\n---``) and parse it.
+    - ``legacy``: strip the leading ``# title`` line, an optional ``## subtitle``,
+      the ``**<display date>**`` line, and the ``**Likes:** N`` line.
+
+    If the content doesn't match the expected pattern, it is returned unchanged as
+    the body with an empty metadata dict (so rendering is never destructive).
+    """
+    if not md_content:
+        return {}, ""
+
+    meta: dict = {}
+
+    if frontmatter_format == "mdx":
+        m = re.match(r'^---\s*\n(.*?)\n---\s*\n?(.*)$', md_content, re.DOTALL)
+        if m:
+            for line in m.group(1).splitlines():
+                if ":" not in line:
+                    continue
+                key, _, raw = line.partition(":")
+                key = key.strip()
+                val = raw.strip()
+                # Strip surrounding YAML quotes.
+                if (val.startswith('"') and val.endswith('"')) \
+                        or (val.startswith("'") and val.endswith("'")):
+                    val = val[1:-1]
+                if key and val:
+                    if key == "image":
+                        meta["cover_image"] = val
+                    else:
+                        meta[key] = val
+            return meta, m.group(2).lstrip("\n")
+
+    # legacy format
+    lines = md_content.split("\n")
+    idx = 0
+
+    # Title: "# ..."
+    if idx < len(lines) and lines[idx].startswith("# "):
+        meta["title"] = lines[idx][2:].strip()
+        idx += 1
+        # Skip the blank line after the title.
+        if idx < len(lines) and lines[idx].strip() == "":
+            idx += 1
+        # Subtitle: "## ..."
+        if idx < len(lines) and lines[idx].startswith("## "):
+            meta["subtitle"] = lines[idx][3:].strip()
+            idx += 1
+            if idx < len(lines) and lines[idx].strip() == "":
+                idx += 1
+        # Date: "**...**"
+        date_match = re.match(r'^\*\*(.+?)\*\*$', lines[idx]) if idx < len(lines) else None
+        if date_match:
+            meta["date"] = date_match.group(1).strip()
+            idx += 1
+            if idx < len(lines) and lines[idx].strip() == "":
+                idx += 1
+        # Likes: "**Likes:** N"
+        likes_match = re.match(r'^\*\*Likes:\*\*\s*(\d+)\s*$', lines[idx]) if idx < len(lines) else None
+        if likes_match:
+            meta["like_count"] = likes_match.group(1)
+            idx += 1
+            if idx < len(lines) and lines[idx].strip() == "":
+                idx += 1
+
+    body = "\n".join(lines[idx:]).lstrip("\n")
+    return meta, body
+
+
+def build_post_document(
+    html_dir: str,
+    body_html: str,
+    comments_html: str = "",
+    header_html: str = "",
+    title: Optional[str] = None,
+) -> str:
+    """Assemble the full HTML document for a post page (classic Substack shell).
+
+    Shared by the scraper's ``save_to_html_file`` and the standalone ``render_posts.py``
+    so both produce identical markup: Spectral webfont, the essay stylesheet, an optional
+    structured header above the body, and optional comments below it.
+    """
+    css_path = os.path.relpath("./assets/css/essay-styles.css", html_dir)
+    css_path = css_path.replace("\\", "/")
+
+    doc_title = _html_escape(title) if title else "Markdown Content"
+    header_block = f"\n                {header_html}" if header_html else ""
+    comments_block = f"\n                {comments_html}" if comments_html else ""
+
+    return f"""
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>{doc_title}</title>
+                <link rel="preconnect" href="https://fonts.googleapis.com">
+                <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+                <link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+                <link rel="stylesheet" href="{css_path}">
+            </head>
+            <body>
+                <main class="markdown-content">{header_block}
+                {body_html}{comments_block}
+                </main>
+            </body>
+            </html>
+        """
+
+
+def render_post_to_html_file(
+    html_filepath: str,
+    body_md: str,
+    meta: Optional[dict] = None,
+    comments_list: Optional[list] = None,
+    frontmatter_format: str = "legacy",
+) -> None:
+    """Re-render a post page from markdown + structured metadata + cached comments.
+
+    Network-free: reads only local content. Used by ``render_posts.py`` (and the
+    ``--render-only`` CLI path) to apply the classic Substack look to posts that were
+    scraped before the structured renderer existed, without re-scraping.
+
+    ``body_md`` is rendered as the post body; ``meta`` (title/subtitle/author/date/
+    cover_image) becomes the header. If ``body_md`` still contains a legacy/mdx header
+    (i.e. it's the full on-disk markdown), pass ``split=True``... otherwise it is split
+    via ``split_metadata_and_body`` automatically when ``meta`` is empty.
+    """
+    body = body_md
+    header_meta = meta or {}
+
+    # If no structured meta was supplied, try to recover it from the markdown itself.
+    if not header_meta:
+        header_meta, body = split_metadata_and_body(body_md, frontmatter_format)
+
+    body_html = md_to_html_static(body)
+    comments_html = render_comments_html(comments_list) if comments_list else ""
+    header_html = build_post_header(header_meta)
+    title = header_meta.get("title")
+
+    html_dir = os.path.dirname(html_filepath)
+    document = build_post_document(
+        html_dir, body_html, comments_html=comments_html, header_html=header_html, title=title
+    )
+    with open(html_filepath, "w", encoding="utf-8") as f:
+        f.write(document)
+
+
 def extract_main_part(url: str) -> str:
     parts = urlparse(url).netloc.split('.')
     return parts[1] if parts[0] == 'www' else parts[0]
@@ -1158,11 +1376,25 @@ class BaseSubstackScraper(ABC):
         """Converts Markdown to HTML."""
         return md_to_html_static(md_content)
 
-    def save_to_html_file(self, filepath: str, content: str, comments_html: str = "") -> None:
-        """Saves HTML content to a file with a link to an external CSS file.
+    def save_to_html_file(
+        self,
+        filepath: str,
+        content: str,
+        comments_html: str = "",
+        header_html: str = "",
+        title: Optional[str] = None,
+    ) -> None:
+        """Saves HTML content to a file with a link to the external CSS file.
 
-        When ``comments_html`` is provided, it is appended inside ``<main>`` after the article
-        body (used to render the fetched comment thread on the individual post page).
+        Renders the classic Substack article shell: Spectral webfont, the essay
+        stylesheet, and the body inside ``<main class="markdown-content">``.
+
+        - ``header_html`` (optional): a structured post header block (see
+          ``build_post_header``) rendered above the body. When omitted the body is
+          rendered as-is (legacy flat-markdown behaviour).
+        - ``title`` (optional): used for ``<title>``/document title.
+        - ``comments_html`` (optional): appended inside ``<main>`` after the body
+          (renders the fetched comment thread on the individual post page).
         """
         if not isinstance(filepath, str):
             raise ValueError("filepath must be a string")
@@ -1170,27 +1402,13 @@ class BaseSubstackScraper(ABC):
             raise ValueError("content must be a string")
 
         html_dir = os.path.dirname(filepath)
-        css_path = os.path.relpath("./assets/css/essay-styles.css", html_dir)
-        css_path = css_path.replace("\\", "/")
-
-        comments_block = f"\n                {comments_html}" if comments_html else ""
-
-        html_content = f"""
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Markdown Content</title>
-                <link rel="stylesheet" href="{css_path}">
-            </head>
-            <body>
-                <main class="markdown-content">
-                {content}{comments_block}
-                </main>
-            </body>
-            </html>
-        """
+        html_content = build_post_document(
+            html_dir,
+            content,
+            comments_html=comments_html,
+            header_html=header_html,
+            title=title,
+        )
 
         with open(filepath, 'w', encoding='utf-8') as file:
             file.write(html_content)
@@ -1260,11 +1478,14 @@ class BaseSubstackScraper(ABC):
         metadata += f"**Likes:** {like_count}\n\n"
         return metadata + content
 
-    def extract_post_data(self, soup: BeautifulSoup, url: str = "") -> Tuple[str, str, str, str, str, str, str, str]:
+    def extract_post_data(self, soup: BeautifulSoup, url: str = "") -> Tuple[str, str, str, str, str, str, str, str, str]:
         """Converts a Substack post soup to markdown.
 
         Returns:
-            ``(title, subtitle, author, date, cover_image, like_count, comment_count, md_content)``.
+            ``(title, subtitle, author, date, cover_image, like_count, comment_count,
+            md_content, body_md)``. ``md_content`` is the body merged with the selected
+            frontmatter header (what gets saved to disk); ``body_md`` is the post body
+            alone, used by the structured HTML renderer.
         """
         # Title
         title_element = soup.select_one("h1.post-title, h2")
@@ -1357,7 +1578,7 @@ class BaseSubstackScraper(ABC):
             title, subtitle, date, author, cover_image, like_count, md, self.frontmatter_format
         )
 
-        return title, subtitle, author, date, cover_image, like_count, comment_count, md_content
+        return title, subtitle, author, date, cover_image, like_count, comment_count, md_content, md
 
     @abstractmethod
     def get_url_soup(self, url: str) -> str:
@@ -1455,17 +1676,40 @@ class BaseSubstackScraper(ABC):
             "json_path": json_path,
         }
 
-    def _write_post_html(self, html_filepath: str, md_content: str, comments_list: Optional[list] = None) -> None:
+    def _write_post_html(
+        self,
+        html_filepath: str,
+        md_content: str,
+        comments_list: Optional[list] = None,
+        meta: Optional[dict] = None,
+    ) -> None:
         """Convert markdown to HTML and write the post page, optionally baking in comments.
+
+        Rendering modes:
+
+        - **Structured** (``meta`` given): ``md_content`` is treated as the post *body* only.
+          Metadata (title/subtitle/author/date/cover) is rendered into a Substack-style
+          header via ``build_post_header`` and placed above the body, so the title/date are
+          no longer inlined in the body text. This is the classic Substack look.
+        - **Flat** (``meta`` is ``None``): ``md_content`` is the merged title+metadata+body
+          markdown and is rendered wholesale (the historical behaviour). Existing callers and
+          unit tests that pass the merged markdown rely on this path.
 
         When ``comments_list`` is non-empty, the thread is rendered (via
         ``render_comments_html``) and injected into the page's ``<main>`` after the article
-        body. An empty/None list produces a page without a comments section (the historical
-        behavior).
+        body. An empty/None list produces a page without a comments section.
         """
         body_html = self.md_to_html(md_content)
         comments_html = render_comments_html(comments_list) if comments_list else ""
-        self.save_to_html_file(html_filepath, body_html, comments_html=comments_html)
+        header_html = build_post_header(meta) if meta else ""
+        title = (meta or {}).get("title") if meta else None
+        self.save_to_html_file(
+            html_filepath,
+            body_html,
+            comments_html=comments_html,
+            header_html=header_html,
+            title=title,
+        )
 
     def scrape_posts(self, num_posts_to_scrape: int = 0) -> None:
         """Iterates over all posts and saves them as markdown and html files."""
@@ -1496,7 +1740,7 @@ class BaseSubstackScraper(ABC):
                             pbar.refresh()
                             continue
 
-                        title, subtitle, author, date, cover_image, like_count, comment_count, md = self.extract_post_data(soup, url)
+                        title, subtitle, author, date, cover_image, like_count, comment_count, md, body_md = self.extract_post_data(soup, url)
 
                         # Skip writing if extraction clearly failed — leaves no stale file so reruns retry.
                         content_element = soup.select_one("div.available-content")
@@ -1517,6 +1761,9 @@ class BaseSubstackScraper(ABC):
                                 leave=False,
                             ) as img_pbar:
                                 md = process_markdown_images(md, self.writer_name, slug, img_pbar)
+                                # Re-apply to the raw body so the rendered HTML body uses the
+                                # same local image paths. Downloads are skipped (files exist).
+                                body_md = process_markdown_images(body_md, self.writer_name, slug)
 
                         self.save_to_file(md_filepath, md)
 
@@ -1530,7 +1777,16 @@ class BaseSubstackScraper(ABC):
                                 pbar.write(f"[WARN] Comments failed for {url}: {ce}")
                         comments_list = comments_result["comments"] if comments_result else []
 
-                        self._write_post_html(html_filepath, md, comments_list)
+                        # Structured render: metadata becomes a Substack-style header, the
+                        # body is rendered separately (no inlined # title / **date** block).
+                        post_meta = {
+                            "title": title,
+                            "subtitle": subtitle,
+                            "author": author,
+                            "date": date,
+                            "cover_image": cover_image,
+                        }
+                        self._write_post_html(html_filepath, body_md, comments_list, meta=post_meta)
 
                         essay_entry = {
                             "title": title,
@@ -1572,7 +1828,12 @@ class BaseSubstackScraper(ABC):
                                 comments_list = comments_result["comments"] if comments_result else []
                                 with open(md_filepath, "r", encoding="utf-8") as f:
                                     md_text = f.read()
-                                self._write_post_html(html_filepath, md_text, comments_list)
+                                on_disk_meta, on_disk_body = split_metadata_and_body(
+                                    md_text, self.frontmatter_format
+                                )
+                                self._write_post_html(
+                                    html_filepath, on_disk_body, comments_list, meta=on_disk_meta
+                                )
                             except Exception as ce:
                                 pbar.write(f"[WARN] Comments failed for {url}: {ce}")
                 except Exception as e:
@@ -1929,6 +2190,16 @@ Examples:
         help="The base URL of the Substack site to scrape."
     )
     parser.add_argument(
+        "--render-only", action="store_true",
+        help="Skip scraping. Re-render existing on-disk Markdown into the Substack-styled "
+             "HTML (no network). Give authors as positional args or use --all. Equivalent to "
+             "running render_posts.py."
+    )
+    parser.add_argument(
+        "--render-all", action="store_true",
+        help="With --render-only, re-render every author under data/."
+    )
+    parser.add_argument(
         "-d", "--directory", type=str,
         help="The directory to save scraped markdown posts."
     )
@@ -2009,11 +2280,38 @@ Examples:
         help="Custom user agent string."
     )
 
+    parser.add_argument(
+        "authors", nargs="*", default=[],
+        help="Author name(s) for --render-only (= data/<author>.json stem).",
+    )
+
     return parser.parse_args()
+
+
+def _run_render_only(args: argparse.Namespace) -> None:
+    """Delegate the --render-only path to the standalone renderer (network-free)."""
+    import render_posts
+
+    if args.render_all:
+        authors = render_posts.discover_authors()
+        if not authors:
+            print("[SKIP] No authors found under data/.")
+            return
+        for author in authors:
+            render_posts.render_author(author, force=True)
+    elif args.authors:
+        for author in args.authors:
+            render_posts.render_author(author, force=True)
+    else:
+        print("Provide one or more authors, or use --render-only --render-all.")
 
 
 def main():
     args = parse_args()
+
+    if args.render_only:
+        _run_render_only(args)
+        return
 
     if args.directory is None:
         args.directory = BASE_MD_DIR

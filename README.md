@@ -30,6 +30,9 @@ specify them as command line arguments.
 - Cross-platform browser/driver support, including **macOS (Intel & Apple Silicon)** with automatic
   `chromedriver`/`edgedriver` download and crash recovery.
 - Optional MDX frontmatter output for static-site generators.
+- **Substack-styled HTML rendering** — per-post pages match the classic Substack look (Spectral
+  serif, orange links, centered title/subtitle/byline header). Re-render existing posts with
+  `render_posts.py` without re-scraping (see [Substack-style Rendering](#substack-style-rendering)).
 
 ## System Architecture
 
@@ -216,6 +219,8 @@ sequenceDiagram
 | Flag | Default | Description |
 | --- | --- | --- |
 | `-u, --url` | — | Base URL of the Substack site (or a single `/p/<post>` URL). |
+| `--render-only` | off | Skip scraping; re-render existing Markdown into Substack-styled HTML (no network). |
+| `--render-all` | off | With `--render-only`, re-render every author under `data/`. |
 | `-d, --directory` | `substack_md_files` | Directory for scraped Markdown files. |
 | `--html-directory` | `substack_html_pages` | Directory for scraped HTML files. |
 | `-n, --number` | `0` (all) | Number of posts to scrape. |
@@ -275,6 +280,38 @@ python backfill_comment_counts.py news --base-url https://aakashgupta.substack.c
 # Re-fetch even posts that already have a count
 python backfill_comment_counts.py aischoollibrarian --force
 ```
+
+## Substack-style Rendering
+
+Per-post HTML pages are rendered to match the **classic default Substack article look**: a
+Spectral serif body (19px / 1.6 line-height), left-aligned text, orange (`#ff6719`) links on a
+white background, a ~728px single column, and a centered header block (cover image → title →
+subtitle → author · date byline). Title/subtitle/date are pulled out of the body into a
+structured header, so they're arranged like a real Substack post rather than inlined as markdown.
+
+The rendered HTML is decoupled from scraping, so you can re-apply the theme to already-scraped
+posts at any time **without re-scraping or any network calls**. Metadata comes from the on-disk
+Markdown (legacy or MDX frontmatter) plus `data/<author>.json`; cached comment threads (from
+`--comments`) are baked in when present.
+
+```bash
+# Re-render one or more authors from existing Markdown + data JSON
+python render_posts.py aischoollibrarian
+python render_posts.py aischoollibrarian news
+
+# Re-render every author found under data/
+python render_posts.py --all
+```
+
+The same is available as a flag on the main CLI:
+
+```bash
+python substack_scraper.py --render-only aischoollibrarian
+python substack_scraper.py --render-only --render-all
+```
+
+Newly scraped posts automatically use the Substack-styled renderer. The Markdown/MDX source
+files are unchanged — only the HTML output is restyled.
 
 ## Output Layout
 
