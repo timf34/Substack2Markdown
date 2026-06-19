@@ -24,6 +24,7 @@ specify them as command line arguments.
 - Supports free and premium content (with subscription).
 - Supports scraping a single post URL directly (for example, `/p/my-post`).
 - Can download Substack-hosted images locally with `--images`.
+- Can fetch each post's comment thread with `--comments` (public threads free; paid-only threads with `--premium`).
 - The HTML interface allows sorting essays by date or likes.
 
 ## Installation
@@ -83,6 +84,14 @@ To download images locally and rewrite markdown image links:
 
 ```bash
 python substack_scraper.py --url https://example.substack.com --images
+```
+
+To fetch each post's comment thread (saved as separate `.comments.md` / `.comments.json`
+files under `substack_comments/`). Public comment threads need no auth; paid-only threads
+require `--premium`:
+
+```bash
+python substack_scraper.py --url https://example.substack.com --comments
 ```
 
 To scrape a specific number of posts:

@@ -23,3 +23,6 @@ substack_html_pages/*
 
 # Ignore downloaded image assets
 substack_images/
+
+# Ignore fetched comment threads
+substack_comments/

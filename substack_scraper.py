@@ -30,7 +30,12 @@ from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.edge.service import Service as EdgeService
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import SessionNotCreatedException, TimeoutException, WebDriverException
+from selenium.common.exceptions import (
+    SessionNotCreatedException,
+    TimeoutException,
+    WebDriverException,
+    InvalidSessionIdException,
+)
 
 from config import EMAIL, PASSWORD
 
@@ -39,9 +44,11 @@ BASE_SUBSTACK_URL: str = "https://niallferguson.substack.com/"
 BASE_MD_DIR: str = "substack_md_files"
 BASE_HTML_DIR: str = "substack_html_pages"
 BASE_IMAGE_DIR: str = "substack_images"
+COMMENTS_DATA_DIR: str = "substack_comments"
 HTML_TEMPLATE: str = "author_template.html"
 JSON_DATA_DIR: str = "data"
 NUM_POSTS_TO_SCRAPE: int = 0
+COMMENTS_SORT: str = "best"
 
 
 def resolve_image_url(url: str) -> str:
@@ -143,6 +150,240 @@ def process_markdown_images(md_content: str, author: str, post_slug: str, pbar=N
     return re.sub(pattern, replace_image, md_content)
 
 
+# =============================================================================
+# COMMENT HELPERS
+# =============================================================================
+
+def _request_json_with_rate_limit_retry(
+    url: str,
+    session: Optional[requests.Session] = None,
+    max_attempts: int = 5,
+) -> Optional[dict]:
+    """GET a JSON URL, retrying on rate-limiting with exponential backoff.
+
+    Returns parsed JSON on success, or ``None`` on non-retryable failure / after exhausting
+    retries. A shared ``session`` may be passed to carry auth cookies (premium scraper).
+    """
+    requester = session if session is not None else requests
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = requester.get(url)
+            if not response.ok:
+                text_lower = (response.text or "").lower()
+                if response.status_code == 429 or "too many requests" in text_lower:
+                    if attempt == max_attempts:
+                        print(f"[WARN] Max attempts reached for URL: {url}. Too many requests.")
+                        return None
+                    base = 2 ** attempt
+                    delay = base + random.uniform(-0.2 * base, 0.2 * base)
+                    print(f"[{attempt}/{max_attempts}] Too many requests. Retrying in {delay:.2f}s...")
+                    sleep(delay)
+                    continue
+                return None
+            return response.json()
+        except Exception as e:
+            if attempt == max_attempts:
+                print(f"[WARN] Error fetching JSON {url}: {e}")
+                return None
+            base = 2 ** attempt
+            delay = base + random.uniform(-0.2 * base, 0.2 * base)
+            sleep(delay)
+    return None
+
+
+def get_post_id_from_slug(
+    base_url: str, slug: str, session: Optional[requests.Session] = None
+) -> Optional[Tuple[int, int, str]]:
+    """Fetch post metadata needed for comments via the public post API.
+
+    Returns ``(post_id, comment_count, write_comment_permissions)`` or ``None`` on failure.
+    """
+    api_url = f"{base_url}api/v1/posts/{slug}"
+    data = _request_json_with_rate_limit_retry(api_url, session=session)
+    if not isinstance(data, dict):
+        return None
+    post_id = data.get("id")
+    if post_id is None:
+        return None
+    permissions = data.get("write_comment_permissions", "") or ""
+    if isinstance(permissions, list):
+        permissions = ",".join(str(p) for p in permissions)
+    return (
+        int(post_id),
+        int(data.get("comment_count", 0) or 0),
+        str(permissions),
+    )
+
+
+def fetch_comments(
+    base_url: str,
+    post_id: int,
+    sort: str = COMMENTS_SORT,
+    session: Optional[requests.Session] = None,
+) -> List[dict]:
+    """Fetch the (nested) comment thread for a post via the public comments API."""
+    api_url = f"{base_url}api/v1/post/{post_id}/comments?all_comments=true&sort={sort}"
+    data = _request_json_with_rate_limit_retry(api_url, session=session)
+    if not isinstance(data, dict):
+        return []
+    return data.get("comments", []) or []
+
+
+def count_all_comments(comments: List[dict]) -> int:
+    """Count comments including nested children."""
+    total = 0
+    for c in comments:
+        total += 1
+        total += count_all_comments(c.get("children", []) or [])
+    return total
+
+
+def _format_comment_date(date_str: str) -> str:
+    if not date_str:
+        return ""
+    try:
+        date_obj = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+        return date_obj.strftime("%b %d, %Y")
+    except (ValueError, TypeError):
+        return date_str
+
+
+def _format_reactions(comment: dict) -> str:
+    reactions = comment.get("reactions") or {}
+    if isinstance(reactions, dict) and reactions:
+        total = sum(int(v) for v in reactions.values() if isinstance(v, (int, float)))
+    else:
+        total = int(comment.get("reaction_count", 0) or 0)
+    return f" ❤ {total}" if total > 0 else ""
+
+
+def render_comments_markdown(comments: List[dict], depth: int = 0) -> str:
+    """Render a nested comment thread as Markdown.
+
+    Top-level comments are rendered as normal blocks; replies are nested as blockquotes.
+    """
+    if not comments:
+        return ""
+    blocks = []
+    for c in comments:
+        name = c.get("name", "Anonymous") or "Anonymous"
+        is_author = bool((c.get("metadata") or {}).get("is_author"))
+        author_flag = " (author)" if is_author else ""
+
+        date_str = _format_comment_date(c.get("date", ""))
+        edited = " (edited)" if c.get("edited_at") else ""
+        reactions = _format_reactions(c)
+
+        header = f"**{name}**{author_flag}"
+        meta_bits = []
+        if date_str:
+            meta_bits.append(date_str + edited)
+        tail = " · ".join(meta_bits) + reactions
+        if tail.strip():
+            header += f" · {tail.strip()}"
+
+        body = (c.get("body", "") or "").strip()
+        if c.get("deleted"):
+            body = "_[comment deleted]_"
+        block = f"{header}\n\n{body}" if body else header
+
+        children = c.get("children", []) or []
+        if children:
+            child_md = render_comments_markdown(children, depth + 1)
+            if child_md:
+                indented = "\n".join(f"> {ln}" if ln else ">" for ln in child_md.splitlines())
+                block += f"\n\n{indented}"
+
+        blocks.append(block)
+
+    return "\n\n".join(blocks)
+
+
+def _html_escape(text: str) -> str:
+    """Minimal HTML escaping for safe insertion into attribute/text content."""
+    if not text:
+        return ""
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+def render_comments_html(comments: List[dict]) -> str:
+    """Render a nested comment thread as semantic HTML for embedding in a post page.
+
+    Returns ``""`` for an empty thread (caller should then render no section). Each comment
+    renders an avatar (when available), author name, optional "Author" flag, date, reaction
+    count, the comment body (converted from its markdown-ish text to HTML), and any nested
+    replies inside ``<ul class="comment-children">``.
+    """
+    if not comments:
+        return ""
+
+    def render_one(c: dict) -> str:
+        name = c.get("name", "Anonymous") or "Anonymous"
+        is_author = bool((c.get("metadata") or {}).get("is_author"))
+        date_str = _format_comment_date(c.get("date", ""))
+        photo_url = (c.get("photo_url") or "").strip()
+
+        reactions = c.get("reactions") or {}
+        if isinstance(reactions, dict) and reactions:
+            react_total = sum(int(v) for v in reactions.values() if isinstance(v, (int, float)))
+        else:
+            react_total = int(c.get("reaction_count", 0) or 0)
+
+        avatar_html = (
+            f'<img class="comment-avatar" src="{_html_escape(photo_url)}" alt="" loading="lazy">'
+            if photo_url else ""
+        )
+        author_flag_html = (
+            '<span class="comment-author-flag">Author</span>' if is_author else ""
+        )
+        date_html = (
+            f'<span class="comment-date">{_html_escape(date_str)}</span>' if date_str else ""
+        )
+        reactions_html = (
+            f'<span class="comment-reactions">❤ {react_total}</span>' if react_total > 0 else ""
+        )
+
+        header = (
+            f'<div class="comment-header">{avatar_html}'
+            f'<span class="comment-author">{_html_escape(name)}</span>'
+            f'{author_flag_html}{date_html}{reactions_html}</div>'
+        )
+
+        body = (c.get("body", "") or "").strip()
+        if c.get("deleted"):
+            body = "_[comment deleted]_"
+        body_html = md_to_html_static(body)
+
+        children = c.get("children", []) or []
+        children_html = ""
+        if children:
+            inner = "".join(f"<li>{render_one(child)}</li>" for child in children)
+            children_html = f'<ul class="comment-children">{inner}</ul>'
+
+        return f'{header}<div class="comment-body">{body_html}</div>{children_html}'
+
+    total = count_all_comments(comments)
+    items = "".join(f"<li class=\"comment\">{render_one(c)}</li>" for c in comments)
+    return (
+        f'<section class="comments">'
+        f'<h2>Comments ({total})</h2>'
+        f'<ul class="comment-thread">{items}</ul>'
+        f'</section>'
+    )
+
+
+def md_to_html_static(md_content: str) -> str:
+    """Module-level Markdown → HTML conversion (mirrors BaseSubstackScraper.md_to_html)."""
+    if not md_content:
+        return ""
+    return markdown.markdown(md_content, extensions=['extra'])
+
+
 def extract_main_part(url: str) -> str:
     parts = urlparse(url).netloc.split('.')
     return parts[1] if parts[0] == 'www' else parts[0]
@@ -224,17 +465,26 @@ class BrowserManager:
                         except Exception:
                             pass
             else:  # macOS/Linux
-                try:
-                    result = subprocess.run(
-                        ['google-chrome', '--version'], 
-                        capture_output=True, text=True, timeout=10
-                    )
-                    if result.returncode == 0:
-                        match = re.search(r'(\d+\.\d+\.\d+\.\d+)', result.stdout)
-                        if match:
-                            version = match.group(1)
-                except Exception:
-                    pass
+                candidates = [
+                    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                    os.path.expanduser("~/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+                    "google-chrome",  # Linux PATH fallback
+                    "chromium",
+                    "chromium-browser",
+                ]
+                for candidate in candidates:
+                    try:
+                        result = subprocess.run(
+                            [candidate, "--version"],
+                            capture_output=True, text=True, timeout=10
+                        )
+                        if result.returncode == 0:
+                            match = re.search(r'(\d+\.\d+\.\d+\.\d+)', result.stdout)
+                            if match:
+                                version = match.group(1)
+                                break
+                    except Exception:
+                        continue
                     
         elif browser == 'edge':
             if os.name == 'nt':  # Windows
@@ -255,17 +505,24 @@ class BrowserManager:
                         except Exception:
                             pass
             else:  # macOS/Linux
-                try:
-                    result = subprocess.run(
-                        ['microsoft-edge', '--version'], 
-                        capture_output=True, text=True, timeout=10
-                    )
-                    if result.returncode == 0:
-                        match = re.search(r'(\d+\.\d+\.\d+\.\d+)', result.stdout)
-                        if match:
-                            version = match.group(1)
-                except Exception:
-                    pass
+                candidates = [
+                    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+                    os.path.expanduser("~/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"),
+                    "microsoft-edge",  # Linux PATH fallback
+                ]
+                for candidate in candidates:
+                    try:
+                        result = subprocess.run(
+                            [candidate, "--version"],
+                            capture_output=True, text=True, timeout=10
+                        )
+                        if result.returncode == 0:
+                            match = re.search(r'(\d+\.\d+\.\d+\.\d+)', result.stdout)
+                            if match:
+                                version = match.group(1)
+                                break
+                    except Exception:
+                        continue
         
         return version
     
@@ -321,9 +578,25 @@ class BrowserManager:
         if not os.path.exists(base_dir):
             os.makedirs(base_dir)
         return os.path.join(base_dir, f'{browser}_profile')
-    
+
+    @staticmethod
+    def _driver_platform(browser: str) -> str:
+        """Return the Chrome-for-Testing / Edge driver platform string for the current OS/arch.
+
+        Detects ARM vs Intel on macOS so Apple Silicon gets mac-arm64 instead of mac-x64.
+        """
+        if os.name == 'nt':
+            return 'win64'
+        if sys.platform == 'darwin':
+            is_arm = os.uname().machine == 'arm64'
+            if browser == 'edge':
+                # Edge driver uses a different naming convention: mac64 vs mac64_m1
+                return 'mac64_m1' if is_arm else 'mac64'
+            return 'mac-arm64' if is_arm else 'mac-x64'
+        return 'linux64'
+
     @classmethod
-    def download_driver_with_requests(cls, browser: str, browser_version: str) -> Optional[str]:
+    def download_driver_with_requests(cls, browser: str, browser_version: str, quiet: bool = False) -> Optional[str]:
         """
         Download the correct driver directly using requests.
         This bypasses webdriver_manager issues and gives us full control.
@@ -344,12 +617,14 @@ class BrowserManager:
             if os.path.exists(driver_path):
                 cached_version = cls.get_driver_version(driver_path)
                 if cached_version and cls.versions_compatible(browser_version, cached_version):
-                    print(f"Using cached chromedriver {cached_version}")
+                    if not quiet:
+                        print(f"Using cached chromedriver {cached_version}")
                     return driver_path
             
             try:
                 # Get the latest driver version for this Chrome version
-                print(f"Fetching Chrome driver info for version {major_version}...")
+                if not quiet:
+                    print(f"Fetching Chrome driver info for version {major_version}...")
                 
                 # Try the Chrome for Testing endpoints
                 endpoints = [
@@ -366,7 +641,7 @@ class BrowserManager:
                     if resp.ok:
                         driver_version = resp.text.strip()
                         # Construct download URL
-                        platform = 'win64' if os.name == 'nt' else ('mac-x64' if sys.platform == 'darwin' else 'linux64')
+                        platform = cls._driver_platform(browser)
                         download_url = f"https://storage.googleapis.com/chrome-for-testing-public/{driver_version}/{platform}/chromedriver-{platform}.zip"
                 except Exception:
                     pass
@@ -382,7 +657,7 @@ class BrowserManager:
                         
                         if driver_version.startswith(major_version):
                             downloads = stable.get('downloads', {}).get('chromedriver', [])
-                            platform = 'win64' if os.name == 'nt' else ('mac-x64' if sys.platform == 'darwin' else 'linux64')
+                            platform = cls._driver_platform(browser)
                             for d in downloads:
                                 if d.get('platform') == platform:
                                     download_url = d.get('url')
@@ -392,7 +667,8 @@ class BrowserManager:
                     print(f"Could not find chromedriver download URL for Chrome {major_version}")
                     return None
                 
-                print(f"Downloading chromedriver {driver_version}...")
+                if not quiet:
+                    print(f"Downloading chromedriver {driver_version}...")
                 resp = requests.get(download_url, timeout=120)
                 if not resp.ok:
                     print(f"Download failed: HTTP {resp.status_code}")
@@ -416,7 +692,8 @@ class BrowserManager:
                             # Make executable on Unix
                             if os.name != 'nt':
                                 os.chmod(target_path, 0o755)
-                            print(f"[OK] Chromedriver downloaded to: {target_path}")
+                            if not quiet:
+                                print(f"[OK] Chromedriver downloaded to: {target_path}")
                             return target_path
                 
                 print("Could not find chromedriver in downloaded archive")
@@ -434,15 +711,17 @@ class BrowserManager:
             if os.path.exists(driver_path):
                 cached_version = cls.get_driver_version(driver_path)
                 if cached_version and cls.versions_compatible(browser_version, cached_version):
-                    print(f"Using cached msedgedriver {cached_version}")
+                    if not quiet:
+                        print(f"Using cached msedgedriver {cached_version}")
                     return driver_path
             
             try:
                 # Get latest Edge driver version
-                print(f"Fetching Edge driver info for version {major_version}...")
+                if not quiet:
+                    print(f"Fetching Edge driver info for version {major_version}...")
                 
                 # Edge driver download URL pattern
-                platform = 'win64' if os.name == 'nt' else ('mac64' if sys.platform == 'darwin' else 'linux64')
+                platform = cls._driver_platform(browser)
                 
                 # Try to get the exact version
                 version_url = f"https://msedgedriver.azureedge.net/LATEST_RELEASE_{major_version}"
@@ -457,7 +736,8 @@ class BrowserManager:
                 
                 download_url = f"https://msedgedriver.azureedge.net/{driver_version}/edgedriver_{platform}.zip"
                 
-                print(f"Downloading msedgedriver {driver_version}...")
+                if not quiet:
+                    print(f"Downloading msedgedriver {driver_version}...")
                 resp = requests.get(download_url, timeout=120)
                 if not resp.ok:
                     print(f"Download failed: HTTP {resp.status_code}")
@@ -478,7 +758,8 @@ class BrowserManager:
                                 target.write(source.read())
                             if os.name != 'nt':
                                 os.chmod(target_path, 0o755)
-                            print(f"[OK] msedgedriver downloaded to: {target_path}")
+                            if not quiet:
+                                print(f"[OK] msedgedriver downloaded to: {target_path}")
                             return target_path
                 
                 print("Could not find msedgedriver in downloaded archive")
@@ -499,6 +780,7 @@ class BrowserManager:
         browser_path: Optional[str] = None,
         user_agent: Optional[str] = None,
         use_persistent_profile: bool = False,
+        quiet: bool = False,
     ) -> webdriver.Remote:
         """
         Creates a WebDriver instance with smart fallback logic.
@@ -509,6 +791,10 @@ class BrowserManager:
         3. Download driver directly to our cache (bypasses PATH issues)
         4. Fall back to webdriver_manager
         5. Fall back to Selenium Manager
+
+        Args:
+            quiet: Suppress informational prints (used during periodic driver restarts).
+                   Warnings/errors are still printed.
         """
         browser = browser.lower()
         if browser not in cls.SUPPORTED_BROWSERS:
@@ -525,7 +811,8 @@ class BrowserManager:
         
         # Detect browser version
         browser_version = cls.get_browser_version(browser)
-        print(f"Detected {browser.title()} version: {browser_version or 'unknown'}")
+        if not quiet:
+            print(f"Detected {browser.title()} version: {browser_version or 'unknown'}")
         
         if not browser_version:
             print(f"WARNING: Could not detect {browser.title()} version. Make sure it's installed.")
@@ -548,7 +835,8 @@ class BrowserManager:
         if use_persistent_profile:
             profile_dir = cls.get_user_data_dir(browser)
             options.add_argument(f"user-data-dir={profile_dir}")
-            print(f"Using persistent profile at: {profile_dir}")
+            if not quiet:
+                print(f"Using persistent profile at: {profile_dir}")
         
         # Common options for stability
         options.add_argument("--no-sandbox")
@@ -561,7 +849,8 @@ class BrowserManager:
         # Strategy 1: Explicit driver path
         if driver_path and os.path.exists(driver_path):
             try:
-                print(f"Using explicit driver path: {driver_path}")
+                if not quiet:
+                    print(f"Using explicit driver path: {driver_path}")
                 driver_version = cls.get_driver_version(driver_path)
                 if driver_version:
                     print(f"Driver version: {driver_version}")
@@ -580,11 +869,13 @@ class BrowserManager:
         
         # Strategy 2: Download to our cache (primary method - bypasses PATH issues)
         if browser_version:
-            print(f"\nDownloading driver to local cache (bypasses system PATH)...")
+            if not quiet:
+                print(f"\nDownloading driver to local cache (bypasses system PATH)...")
             try:
-                downloaded_path = cls.download_driver_with_requests(browser, browser_version)
+                downloaded_path = cls.download_driver_with_requests(browser, browser_version, quiet=quiet)
                 if downloaded_path and os.path.exists(downloaded_path):
-                    print(f"Using downloaded driver: {downloaded_path}")
+                    if not quiet:
+                        print(f"Using downloaded driver: {downloaded_path}")
                     if browser == 'chrome':
                         service = ChromeService(executable_path=downloaded_path)
                         return webdriver.Chrome(service=service, options=options)
@@ -596,29 +887,43 @@ class BrowserManager:
                 print(f"[FAIL] Direct download failed: {e}")
         
         # Strategy 3: webdriver_manager with explicit path
-        print("\nTrying webdriver_manager...")
+        if not quiet:
+            print("\nTrying webdriver_manager...")
         try:
             if browser == 'chrome':
                 from webdriver_manager.chrome import ChromeDriverManager
                 from webdriver_manager.core.os_manager import ChromeType
                 mgr = ChromeDriverManager()
                 driver_path_wdm = mgr.install()
-                print(f"webdriver_manager installed driver to: {driver_path_wdm}")
-                service = ChromeService(executable_path=driver_path_wdm)
-                return webdriver.Chrome(service=service, options=options)
+                if not quiet:
+                    print(f"webdriver_manager installed driver to: {driver_path_wdm}")
+                # Reject known non-executable artifacts (THIRD_PARTY_NOTICES / LICENSE) returned
+                # by webdriver_manager on some platforms before trying to exec them.
+                if driver_path_wdm and os.path.isfile(driver_path_wdm) \
+                        and not driver_path_wdm.endswith("THIRD_PARTY_NOTICES.chromedriver") \
+                        and not driver_path_wdm.endswith("LICENSE.chromedriver"):
+                    service = ChromeService(executable_path=driver_path_wdm)
+                    return webdriver.Chrome(service=service, options=options)
+                print(f"[SKIP] webdriver_manager returned a non-driver file, falling through.")
             else:
                 from webdriver_manager.microsoft import EdgeChromiumDriverManager
                 mgr = EdgeChromiumDriverManager()
                 driver_path_wdm = mgr.install()
-                print(f"webdriver_manager installed driver to: {driver_path_wdm}")
-                service = EdgeService(executable_path=driver_path_wdm)
-                return webdriver.Edge(service=service, options=options)
+                if not quiet:
+                    print(f"webdriver_manager installed driver to: {driver_path_wdm}")
+                if driver_path_wdm and os.path.isfile(driver_path_wdm) \
+                        and not driver_path_wdm.endswith("THIRD_PARTY_NOTICES.msedgedriver") \
+                        and not driver_path_wdm.endswith("LICENSE.msedgedriver"):
+                    service = EdgeService(executable_path=driver_path_wdm)
+                    return webdriver.Edge(service=service, options=options)
+                print(f"[SKIP] webdriver_manager returned a non-driver file, falling through.")
         except Exception as e:
             errors.append(f"webdriver_manager failed: {e}")
             print(f"[FAIL] webdriver_manager failed: {e}")
         
         # Strategy 4: Let Selenium Manager try (last resort)
-        print("\nTrying Selenium Manager (last resort)...")
+        if not quiet:
+            print("\nTrying Selenium Manager (last resort)...")
         try:
             if browser == 'chrome':
                 return webdriver.Chrome(options=options)
@@ -735,6 +1040,8 @@ class BaseSubstackScraper(ABC):
         html_save_dir: str,
         download_images: bool = False,
         frontmatter_format: str = "legacy",
+        fetch_comments_flag: bool = False,
+        comments_sort: str = COMMENTS_SORT,
     ):
         if frontmatter_format not in ("legacy", "mdx"):
             raise ValueError("frontmatter_format must be 'legacy' or 'mdx'")
@@ -765,6 +1072,13 @@ class BaseSubstackScraper(ABC):
 
         self.download_images: bool = download_images
         self.image_dir = Path(BASE_IMAGE_DIR) / self.writer_name
+
+        self.fetch_comments: bool = fetch_comments_flag
+        self.comments_sort: str = comments_sort
+        self.comments_save_dir: str = os.path.join(COMMENTS_DATA_DIR, self.writer_name)
+        if self.fetch_comments and not os.path.exists(self.comments_save_dir):
+            os.makedirs(self.comments_save_dir)
+            print(f"Created comments directory {self.comments_save_dir}")
 
         if self.is_single_post:
             self.post_urls: List[str] = [original_url]
@@ -842,10 +1156,14 @@ class BaseSubstackScraper(ABC):
     @staticmethod
     def md_to_html(md_content: str) -> str:
         """Converts Markdown to HTML."""
-        return markdown.markdown(md_content, extensions=['extra'])
+        return md_to_html_static(md_content)
 
-    def save_to_html_file(self, filepath: str, content: str) -> None:
-        """Saves HTML content to a file with a link to an external CSS file."""
+    def save_to_html_file(self, filepath: str, content: str, comments_html: str = "") -> None:
+        """Saves HTML content to a file with a link to an external CSS file.
+
+        When ``comments_html`` is provided, it is appended inside ``<main>`` after the article
+        body (used to render the fetched comment thread on the individual post page).
+        """
         if not isinstance(filepath, str):
             raise ValueError("filepath must be a string")
         if not isinstance(content, str):
@@ -854,6 +1172,8 @@ class BaseSubstackScraper(ABC):
         html_dir = os.path.dirname(filepath)
         css_path = os.path.relpath("./assets/css/essay-styles.css", html_dir)
         css_path = css_path.replace("\\", "/")
+
+        comments_block = f"\n                {comments_html}" if comments_html else ""
 
         html_content = f"""
             <!DOCTYPE html>
@@ -866,7 +1186,7 @@ class BaseSubstackScraper(ABC):
             </head>
             <body>
                 <main class="markdown-content">
-                {content}
+                {content}{comments_block}
                 </main>
             </body>
             </html>
@@ -940,11 +1260,11 @@ class BaseSubstackScraper(ABC):
         metadata += f"**Likes:** {like_count}\n\n"
         return metadata + content
 
-    def extract_post_data(self, soup: BeautifulSoup, url: str = "") -> Tuple[str, str, str, str, str, str, str]:
+    def extract_post_data(self, soup: BeautifulSoup, url: str = "") -> Tuple[str, str, str, str, str, str, str, str]:
         """Converts a Substack post soup to markdown.
 
         Returns:
-            ``(title, subtitle, author, date, cover_image, like_count, md_content)``.
+            ``(title, subtitle, author, date, cover_image, like_count, comment_count, md_content)``.
         """
         # Title
         title_element = soup.select_one("h1.post-title, h2")
@@ -959,6 +1279,7 @@ class BaseSubstackScraper(ABC):
         date = ""
         author = ""
         cover_image = ""
+        comment_count = "0"
         script_tag = soup.find("script", {"type": "application/ld+json"})
         if script_tag and script_tag.string:
             try:
@@ -980,6 +1301,18 @@ class BaseSubstackScraper(ABC):
                         cover_image = img.get("url", "") if isinstance(img, dict) else str(img)
                     elif isinstance(images, dict):
                         cover_image = images.get("url", "")
+                # Comment count: prefer the top-level field, then the CommentAction
+                # statistic in interactionStatistic (matches the public API value).
+                raw_cc = ld_json.get("comment_count")
+                if raw_cc is None:
+                    for stat in ld_json.get("interactionStatistic") or []:
+                        if not isinstance(stat, dict):
+                            continue
+                        if "CommentAction" in str(stat.get("interactionType", "")):
+                            raw_cc = stat.get("userInteractionCount")
+                            break
+                if raw_cc is not None and str(raw_cc).strip().lstrip("-").isdigit():
+                    comment_count = str(int(raw_cc))
             except (json.JSONDecodeError, ValueError, KeyError):
                 pass
 
@@ -1024,7 +1357,7 @@ class BaseSubstackScraper(ABC):
             title, subtitle, date, author, cover_image, like_count, md, self.frontmatter_format
         )
 
-        return title, subtitle, author, date, cover_image, like_count, md_content
+        return title, subtitle, author, date, cover_image, like_count, comment_count, md_content
 
     @abstractmethod
     def get_url_soup(self, url: str) -> str:
@@ -1044,6 +1377,96 @@ class BaseSubstackScraper(ABC):
         with open(json_path, 'w', encoding='utf-8') as f:
             json.dump(essays_data, f, ensure_ascii=False, indent=4)
 
+    def _get_session(self) -> Optional[requests.Session]:
+        """Return a requests session for JSON API calls (used for comments).
+
+        Default is ``None`` (unauthenticated, free scraper). Premium scrapers override this
+        to build a session seeded with the logged-in browser's cookies so paid-only comment
+        threads can be fetched.
+        """
+        return None
+
+    def scrape_comments_for_post(self, url: str) -> Optional[dict]:
+        """Fetch (and cache) a post's comment thread, returning the comment list.
+
+        Behavior:
+        - If ``{slug}.comments.json`` already exists on disk, load and return it (cache hit,
+          **no network calls**) — this makes ``--comments`` cheap to re-run on already-scraped
+          publications.
+        - Otherwise resolve the post id via the public posts API, fetch the nested thread,
+          and persist it to ``{slug}.comments.json`` (raw payload, machine fidelity).
+        - Returns ``None`` when there are no comments, when a paid-only thread can't be read
+          without ``--premium`` (logged once), or on fetch failure.
+        - Returns ``{"total_comments": int, "comments": list, "json_path": str}`` on success.
+
+        The rendered comments live in the individual post HTML page (see ``scrape_posts``);
+        no separate ``.comments.md`` file is written.
+        """
+        slug = get_post_slug(url) if is_post_url(url) else (url.rstrip('/').split('/')[-1] or "unknown_post")
+
+        json_path = os.path.join(self.comments_save_dir, f"{slug}.comments.json")
+
+        # Cache hit: load from disk without hitting the network.
+        if os.path.exists(json_path):
+            try:
+                with open(json_path, "r", encoding="utf-8") as f:
+                    cached = json.load(f)
+                if isinstance(cached, list):
+                    return {
+                        "total_comments": count_all_comments(cached),
+                        "comments": cached,
+                        "json_path": json_path,
+                    }
+            except (json.JSONDecodeError, OSError) as e:
+                print(f"[WARN] Corrupt comments cache {json_path}: {e}. Refetching.")
+
+        session = self._get_session()
+
+        meta = get_post_id_from_slug(self.base_substack_url, slug, session=session)
+        if meta is None:
+            print(f"[SKIP] Could not resolve post metadata for comments: {url}")
+            return None
+        post_id, comment_count, permissions = meta
+
+        if comment_count == 0:
+            return None
+
+        # Small delay between the post-lookup and the comments call to avoid 429s.
+        sleep(random.uniform(1.0, 2.0))
+
+        comments = fetch_comments(self.base_substack_url, post_id, sort=self.comments_sort, session=session)
+
+        if not comments:
+            # comment_count > 0 but empty payload → likely a paid-only thread without auth.
+            if permissions and "only_paid" in permissions:
+                print(
+                    f"[SKIP] {comment_count} comments on {url} are paid-only "
+                    f"— rerun with --premium to fetch them."
+                )
+            return None
+
+        os.makedirs(self.comments_save_dir, exist_ok=True)
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(comments, f, ensure_ascii=False, indent=4)
+
+        return {
+            "total_comments": count_all_comments(comments),
+            "comments": comments,
+            "json_path": json_path,
+        }
+
+    def _write_post_html(self, html_filepath: str, md_content: str, comments_list: Optional[list] = None) -> None:
+        """Convert markdown to HTML and write the post page, optionally baking in comments.
+
+        When ``comments_list`` is non-empty, the thread is rendered (via
+        ``render_comments_html``) and injected into the page's ``<main>`` after the article
+        body. An empty/None list produces a page without a comments section (the historical
+        behavior).
+        """
+        body_html = self.md_to_html(md_content)
+        comments_html = render_comments_html(comments_list) if comments_list else ""
+        self.save_to_html_file(html_filepath, body_html, comments_html=comments_html)
+
     def scrape_posts(self, num_posts_to_scrape: int = 0) -> None:
         """Iterates over all posts and saves them as markdown and html files."""
         essays_data = []
@@ -1060,12 +1483,20 @@ class BaseSubstackScraper(ABC):
                     if not os.path.exists(md_filepath):
                         soup = self.get_url_soup(url)
                         if soup is None:
+                            # Body is paywalled/unavailable. Still attempt comments so the
+                            # free scraper can report paid-only threads (the post metadata
+                            # API is public even when the body is not).
+                            if self.fetch_comments:
+                                try:
+                                    self.scrape_comments_for_post(url)
+                                except Exception as ce:
+                                    pbar.write(f"[WARN] Comments failed for {url}: {ce}")
                             total += 1
                             pbar.total = total
                             pbar.refresh()
                             continue
 
-                        title, subtitle, author, date, cover_image, like_count, md = self.extract_post_data(soup, url)
+                        title, subtitle, author, date, cover_image, like_count, comment_count, md = self.extract_post_data(soup, url)
 
                         # Skip writing if extraction clearly failed — leaves no stale file so reruns retry.
                         content_element = soup.select_one("div.available-content")
@@ -1088,21 +1519,62 @@ class BaseSubstackScraper(ABC):
                                 md = process_markdown_images(md, self.writer_name, slug, img_pbar)
 
                         self.save_to_file(md_filepath, md)
-                        html_content = self.md_to_html(md)
-                        self.save_to_html_file(html_filepath, html_content)
 
-                        essays_data.append({
+                        # Fetch comments BEFORE rendering the HTML so they can be baked into
+                        # the individual post page. The .md source stays clean.
+                        comments_result = None
+                        if self.fetch_comments:
+                            try:
+                                comments_result = self.scrape_comments_for_post(url)
+                            except Exception as ce:
+                                pbar.write(f"[WARN] Comments failed for {url}: {ce}")
+                        comments_list = comments_result["comments"] if comments_result else []
+
+                        self._write_post_html(html_filepath, md, comments_list)
+
+                        essay_entry = {
                             "title": title,
                             "subtitle": subtitle,
                             "author": author,
                             "date": date,
                             "cover_image": cover_image,
                             "like_count": like_count,
+                            # Top-level comment count from the page's ld+json; always
+                            # available (no extra request). When --comments scrapes the
+                            # full thread below, total_comments overrides this with the
+                            # recursive count (includes nested replies).
+                            "comment_count": comment_count,
                             "file_link": md_filepath,
                             "html_link": html_filepath
-                        })
+                        }
+                        if comments_result:
+                            essay_entry["comment_count"] = comments_result.get("total_comments")
+                            essay_entry["total_comments"] = comments_result.get("total_comments")
+                            essay_entry["comments_json_link"] = comments_result.get("json_path")
+                        essays_data.append(essay_entry)
+
+                        # Periodic driver restart to shed accumulated state/leaks before they
+                        # destabilize the renderer. Only applies to scrapers with a driver.
+                        if hasattr(self, "_recreate_driver"):
+                            self._scrape_counter += 1
+                            if self._scrape_counter % 40 == 0:
+                                pbar.write("[MAINT] Periodic driver restart to shed state...")
+                                self._recreate_driver()
+                                sleep(random.uniform(4, 8))
                     else:
                         pbar.write(f"File already exists: {md_filepath}")
+                        # Fetch comments independently of the post body so --comments can be
+                        # added to an already-scraped publication without re-scraping posts.
+                        # Re-render the HTML (from the on-disk md) with comments baked in.
+                        if self.fetch_comments:
+                            try:
+                                comments_result = self.scrape_comments_for_post(url)
+                                comments_list = comments_result["comments"] if comments_result else []
+                                with open(md_filepath, "r", encoding="utf-8") as f:
+                                    md_text = f.read()
+                                self._write_post_html(html_filepath, md_text, comments_list)
+                            except Exception as ce:
+                                pbar.write(f"[WARN] Comments failed for {url}: {ce}")
                 except Exception as e:
                     pbar.write(f"Error scraping post: {e}")
 
@@ -1126,9 +1598,17 @@ class SubstackScraper(BaseSubstackScraper):
         html_save_dir: str,
         download_images: bool = False,
         frontmatter_format: str = "legacy",
+        fetch_comments_flag: bool = False,
+        comments_sort: str = COMMENTS_SORT,
     ):
         super().__init__(
-            base_substack_url, md_save_dir, html_save_dir, download_images, frontmatter_format
+            base_substack_url,
+            md_save_dir,
+            html_save_dir,
+            download_images,
+            frontmatter_format,
+            fetch_comments_flag=fetch_comments_flag,
+            comments_sort=comments_sort,
         )
 
     def get_url_soup(self, url: str, max_attempts: int = 5) -> Optional[BeautifulSoup]:
@@ -1180,6 +1660,8 @@ class PremiumSubstackScraper(BaseSubstackScraper):
         use_persistent_profile: bool = False,
         skip_login: bool = False,
         frontmatter_format: str = "legacy",
+        fetch_comments_flag: bool = False,
+        comments_sort: str = COMMENTS_SORT,
     ) -> None:
         """
         Initialize the premium scraper with browser automation.
@@ -1196,6 +1678,15 @@ class PremiumSubstackScraper(BaseSubstackScraper):
             use_persistent_profile: Reuse browser profile across runs (saves login)
             skip_login: Skip login if using a pre-authenticated profile
         """
+        # Store settings so the driver can be recreated with identical options after a crash.
+        self._browser = browser
+        self._headless = headless
+        self._driver_path = driver_path
+        self._browser_path = browser_path
+        self._user_agent = user_agent
+        self._base_substack_url = base_substack_url
+        self._scrape_counter = 0
+
         # Initialize driver before calling super().__init__ since that fetches URLs
         self.driver = BrowserManager.create_driver(
             browser=browser,
@@ -1218,7 +1709,13 @@ class PremiumSubstackScraper(BaseSubstackScraper):
             sleep(3)
 
         super().__init__(
-            base_substack_url, md_save_dir, html_save_dir, download_images, frontmatter_format
+            base_substack_url,
+            md_save_dir,
+            html_save_dir,
+            download_images,
+            frontmatter_format,
+            fetch_comments_flag=fetch_comments_flag,
+            comments_sort=comments_sort,
         )
 
     def login(self) -> None:
@@ -1263,10 +1760,77 @@ class PremiumSubstackScraper(BaseSubstackScraper):
         error_container = self.driver.find_elements(By.ID, 'error-container')
         return len(error_container) > 0 and error_container[0].is_displayed()
 
+    def _get_session(self) -> Optional[requests.Session]:
+        """Build a requests.Session seeded with the logged-in browser's cookies.
+
+        Lets the JSON comment endpoints authenticate as the current user, so paid-only
+        comment threads can be fetched. Cookies are read fresh each call so they stay valid
+        after a ``_recreate_driver()`` (persistent profile carries the session).
+        """
+        session = requests.Session()
+        try:
+            cookies = self.driver.get_cookies()
+        except Exception as e:
+            print(f"[WARN] Could not read browser cookies for comments: {e}")
+            return session
+        for c in cookies:
+            try:
+                session.cookies.set(
+                    c.get("name", ""),
+                    c.get("value", ""),
+                    domain=c.get("domain"),
+                    path=c.get("path", "/"),
+                )
+            except Exception:
+                continue
+        try:
+            session.headers.update({
+                "User-Agent": self.driver.execute_script("return navigator.userAgent;"),
+            })
+        except Exception:
+            pass
+        return session
+
+    def _driver_is_dead(self) -> bool:
+        """Cheap liveness probe. Returns True if the driver/session is unusable."""
+        try:
+            _ = self.driver.current_url
+            return False
+        except (WebDriverException, InvalidSessionIdException):
+            return True
+
+    def _recreate_driver(self) -> None:
+        """Tear down the (possibly dead) driver and build a fresh one with the same settings.
+
+        With a persistent profile, saved cookies mean NO re-login is required after recreation.
+        """
+        try:
+            self.driver.quit()
+        except Exception:
+            pass
+        self.driver = BrowserManager.create_driver(
+            browser=self._browser,
+            headless=self._headless,
+            driver_path=self._driver_path,
+            browser_path=self._browser_path,
+            user_agent=self._user_agent,
+            use_persistent_profile=self.use_persistent_profile,
+            quiet=True,
+        )
+        if not self.use_persistent_profile:
+            self.login()
+        else:
+            try:
+                self.driver.get(self._base_substack_url)
+                sleep(3)
+            except Exception:
+                pass
+
     def get_url_soup(self, url: str, max_attempts: int = 5) -> Optional[BeautifulSoup]:
         """Gets soup from URL using logged-in Selenium driver, with retry on rate limiting."""
         for attempt in range(1, max_attempts + 1):
             try:
+                sleep(random.uniform(4.0, 9.0)) 
                 self.driver.get(url)
 
                 # Wait up to 20s for the post body (or a paywall marker) to appear, instead of a fixed sleep.
@@ -1300,6 +1864,23 @@ class PremiumSubstackScraper(BaseSubstackScraper):
             except RuntimeError:
                 raise
             except Exception as e:
+                msg = str(e).lower()
+                crashed = (
+                    isinstance(e, InvalidSessionIdException)
+                    or any(s in msg for s in (
+                        "tab crashed",
+                        "chrome not reachable",
+                        "no such session",
+                        "session not created",
+                        "unable to connect to renderer",
+                        "target window already closed",
+                    ))
+                )
+                if crashed:
+                    print(f"[{attempt}/{max_attempts}] Tab/session crashed — recreating driver: {e}")
+                    self._recreate_driver()
+                    sleep(random.uniform(5, 10))  # cool-down after recovery
+                    continue  # retry the SAME url on a fresh driver
                 raise ValueError(f"Error fetching page: {url}. Error: {e}") from e
 
         raise RuntimeError(f"Failed to fetch page after {max_attempts} attempts: {url}")
@@ -1335,6 +1916,9 @@ Examples:
   # Subsequent runs (skip login, use saved session)
   python substack_scraper.py --url https://example.substack.com --premium --persistent-profile --skip-login
   
+  # Fetch comments too (public threads; add --premium for paid-only comments)
+  python substack_scraper.py --url https://example.substack.com --comments
+  
   # Use manually downloaded driver
   python substack_scraper.py --url https://example.substack.com --premium --chrome-driver-path /path/to/chromedriver
         """
@@ -1360,6 +1944,17 @@ Examples:
         "--images",
         action="store_true",
         help="Download images and update markdown to use local paths."
+    )
+    parser.add_argument(
+        "--comments",
+        action="store_true",
+        help="Fetch each post's comment thread as separate .comments.md/.comments.json files. "
+             "Public threads need no auth; paid-only threads require --premium."
+    )
+    parser.add_argument(
+        "--comments-sort", type=str, default=COMMENTS_SORT,
+        choices=["best", "most_recent_first"],
+        help="Comment sort order (default: best)."
     )
     parser.add_argument(
         "--frontmatter", type=str, default="legacy", choices=["legacy", "mdx"],
@@ -1449,6 +2044,8 @@ def main():
                 use_persistent_profile=args.persistent_profile,
                 skip_login=args.skip_login,
                 frontmatter_format=args.frontmatter,
+                fetch_comments_flag=args.comments,
+                comments_sort=args.comments_sort,
             )
         else:
             scraper = SubstackScraper(
@@ -1457,6 +2054,8 @@ def main():
                 html_save_dir=args.html_directory,
                 download_images=args.images,
                 frontmatter_format=args.frontmatter,
+                fetch_comments_flag=args.comments,
+                comments_sort=args.comments_sort,
             )
         scraper.scrape_posts(args.number)
 
@@ -1476,6 +2075,8 @@ def main():
                 use_persistent_profile=args.persistent_profile,
                 skip_login=args.skip_login,
                 frontmatter_format=args.frontmatter,
+                fetch_comments_flag=args.comments,
+                comments_sort=args.comments_sort,
             )
         else:
             scraper = SubstackScraper(
@@ -1484,6 +2085,8 @@ def main():
                 html_save_dir=args.html_directory,
                 download_images=args.images,
                 frontmatter_format=args.frontmatter,
+                fetch_comments_flag=args.comments,
+                comments_sort=args.comments_sort,
             )
         scraper.scrape_posts(num_posts_to_scrape=NUM_POSTS_TO_SCRAPE)
 
