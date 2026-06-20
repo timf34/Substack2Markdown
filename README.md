@@ -8,7 +8,7 @@ long as you're subscribed to that substack.
 installation required! (Works for free Substacks only.)
 
 
-![Substack2Markdown Interface](./assets/images/screenshot.png)
+![Substack2Markdown Interface](./assets/images/main-page.png)
 
 Once you run the script, it will create a folder named after the substack in `/substack_md_files`,
 and then begin to scrape the substack URL, converting the blog posts into markdown files. Once all the posts have been
@@ -160,6 +160,8 @@ the individual post's HTML page, and counted in the sortable index.
 - **Public threads** need no authentication — works with the free scraper.
 - **Paid-only threads** require `--premium` (the logged-in browser's cookies authenticate the comment API).
 
+![Comments](./assets/images/comments.png)
+
 ```bash
 # Public comment threads (free scraper)
 python substack_scraper.py --url https://example.substack.com --comments
@@ -288,6 +290,8 @@ Spectral serif body (19px / 1.6 line-height), left-aligned text, orange (`#ff671
 white background, a ~728px single column, and a centered header block (cover image → title →
 subtitle → author · date byline). Title/subtitle/date are pulled out of the body into a
 structured header, so they're arranged like a real Substack post rather than inlined as markdown.
+
+![Rendered post](./assets/images/post.png)
 
 The rendered HTML is decoupled from scraping, so you can re-apply the theme to already-scraped
 posts at any time **without re-scraping or any network calls**. Metadata comes from the on-disk
