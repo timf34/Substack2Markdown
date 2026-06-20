@@ -1,111 +1,317 @@
+/* ==========================================================================
+   Classic default-theme Substack article styling.
+
+   Typography values were measured from a live Substack post body via DevTools
+   (Spectral serif, ~19px/1.6 body, left-aligned, orange links on white) plus
+   the documented default theme tokens (--print_pop #ff6719, etc.).
+   ========================================================================== */
+
+:root {
+    --print_pop: #ff6719;
+    --print_pop_darken: #e45a13;
+    --web_bg_color: #ffffff;
+    --print_on_web_bg_color: #363737;
+    --print_secondary_on_web_bg_color: #868787;
+    --background_contrast_1: #f6f5f2;
+    --background_contrast_2: #eeece6;
+    --body_width: 728px;
+    --body_font: 'Spectral', Georgia, 'Times New Roman', serif;
+    --ui_font: 'Spectral', Georgia, 'Times New Roman', serif;
+}
+
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: var(--body_font);
     margin: 0;
-    padding: 0;
-    background-color: rgba(249, 245, 228, 0.51);
-    color: #333;
+    padding: 16px 0;
+    background-color: var(--web_bg_color);
+    color: var(--print_on_web_bg_color);
     line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
 }
 
 .markdown-content {
-    max-width: 800px;
-    margin: 20px auto;
-    padding: 20px;
-    background: rgba(255, 255, 250);
-    box-shadow: 0 2px 4px 0 rgba(0,0,0,.2);
+    max-width: var(--body_width);
+    margin: 0 auto;
+    padding: 0 16px;
+    background: var(--web_bg_color);
+    /* Substack is flat: no card shadow / box. */
 }
 
-h1, h2, h3, h4, h5, h6 {
-    padding: 20px 0;
+/* ---------- Post header (title / subtitle / byline / cover) ---------- */
+
+.markdown-content .post-header {
     text-align: center;
-    margin: 0;
-    color: #333;
+    margin-bottom: 40px;
+    padding-top: 8px;
 }
 
-h1 { font-size: 2.5em; }
-h2 { font-size: 2em; }
-h3 { font-size: 1.75em; }
-h4 { font-size: 1.5em; }
-h5 { font-size: 1.25em; }
-h6 { font-size: 1em; }
+.markdown-content .post-cover {
+    width: 100%;
+    height: auto;
+    border-radius: 4px;
+    margin: 0 0 32px;
+    display: block;
+}
+
+.markdown-content .post-title {
+    font-family: var(--body_font);
+    font-size: 36px;
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    color: var(--print_on_web_bg_color);
+    margin: 0 0 10px;
+    padding: 0;
+    text-align: center;
+}
+
+.markdown-content .post-subtitle {
+    font-family: var(--body_font);
+    font-size: 20px;
+    font-weight: 400;
+    line-height: 1.4;
+    color: var(--print_secondary_on_web_bg_color);
+    margin: 0 0 20px;
+    padding: 0;
+    text-align: center;
+}
+
+.markdown-content .post-byline {
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--print_secondary_on_web_bg_color);
+    margin: 0;
+}
+
+.markdown-content .post-byline a {
+    color: var(--print_secondary_on_web_bg_color);
+}
+
+/* ---------- Body content ---------- */
 
 .markdown-content p {
-    max-width: 70ch;
-    margin: 0 auto 1em;
-    text-align: justify;
+    font-family: var(--body_font);
+    font-size: 19px;
+    line-height: 1.6;
+    color: var(--print_on_web_bg_color);
+    margin: 0 0 1.4em;
+    text-align: left;
 }
 
-.markdown-content ul, .markdown-content ol {
-    max-width: 65ch;
-    margin: 0 auto 1em;
-    padding-left: 2em;
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+    font-family: var(--body_font);
+    color: var(--print_on_web_bg_color);
+    font-weight: 700;
+    line-height: 1.25;
+    text-align: left;
+    margin: 1.8em 0 0.6em;
+    padding: 0;
+}
+
+.markdown-content h1 { font-size: 28px; }
+.markdown-content h2 { font-size: 28px; }
+.markdown-content h3 { font-size: 22px; }
+.markdown-content h4 { font-size: 18px; }
+.markdown-content h5 { font-size: 16px; }
+.markdown-content h6 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; }
+
+.markdown-content ul,
+.markdown-content ol {
+    max-width: 100%;
+    margin: 0 0 1.4em;
+    padding-left: 1.6em;
+    font-size: 19px;
+    line-height: 1.6;
 }
 
 .markdown-content li {
     margin-bottom: 0.5em;
 }
 
+.markdown-content li > ul,
+.markdown-content li > ol {
+    margin-top: 0.5em;
+    margin-bottom: 0;
+}
+
 .markdown-content a {
-    color: #0066cc;
+    color: var(--print_pop);
     text-decoration: none;
 }
 
 .markdown-content a:hover {
+    color: var(--print_pop_darken);
     text-decoration: underline;
 }
 
+.markdown-content strong {
+    font-weight: 700;
+    color: var(--print_on_web_bg_color);
+}
+
 .markdown-content blockquote {
-    border-left: 4px solid #ddd;
-    padding-left: 1em;
-    margin: 0 auto 1em;
-    max-width: 65ch;
+    border-left: 3px solid var(--background_contrast_2);
+    margin: 1.6em 0;
+    padding: 0.2em 0 0.2em 1.2em;
+    font-family: var(--body_font);
     font-style: italic;
-    color: #555;
+    font-size: 19px;
+    line-height: 1.6;
+    color: var(--print_on_web_bg_color);
+    max-width: 100%;
+}
+
+.markdown-content blockquote p:last-child {
+    margin-bottom: 0;
 }
 
 .markdown-content code {
-    background-color: #f4f4f4;
-    padding: 0.2em 0.4em;
+    background-color: var(--background_contrast_1);
+    padding: 0.15em 0.35em;
     border-radius: 3px;
-    font-family: monospace;
+    font-family: 'SF Mono', Menlo, Monaco, Consolas, 'Courier New', monospace;
+    font-size: 0.88em;
+    color: var(--print_on_web_bg_color);
 }
 
 .markdown-content pre {
-    background-color: #f4f4f4;
-    padding: 1em;
-    border-radius: 5px;
+    background-color: var(--background_contrast_1);
+    padding: 14px 16px;
+    border-radius: 4px;
     overflow-x: auto;
-    max-width: 70ch;
-    margin: 0 auto 1em;
+    margin: 0 0 1.4em;
+    line-height: 1.45;
+}
+
+.markdown-content pre code {
+    background-color: transparent;
+    padding: 0;
+    font-size: 0.85em;
 }
 
 .markdown-content img {
     max-width: 100%;
     height: auto;
     display: block;
-    margin: 0 auto 1em;
-}
-
-.markdown-content table {
-    border-collapse: collapse;
-    margin: 0 auto 1em;
-    max-width: 70ch;
-}
-
-.markdown-content th, .markdown-content td {
-    border: 1px solid #ddd;
-    padding: 8px;
-    text-align: left;
-}
-
-.markdown-content th {
-    background-color: #f4f4f4;
-    font-weight: bold;
+    margin: 0 0 1.4em;
+    border-radius: 4px;
 }
 
 .markdown-content hr {
     border: none;
-    border-top: 1px solid #ddd;
-    margin: 2em auto;
-    max-width: 70ch;
+    border-top: 1px solid var(--background_contrast_2);
+    margin: 2.2em auto;
+    width: 100%;
+    height: 0;
+}
+
+.markdown-content table {
+    border-collapse: collapse;
+    margin: 0 0 1.4em;
+    width: 100%;
+    font-size: 17px;
+}
+
+.markdown-content th,
+.markdown-content td {
+    border: 1px solid var(--background_contrast_2);
+    padding: 8px 12px;
+    text-align: left;
+}
+
+.markdown-content th {
+    background-color: var(--background_contrast_1);
+    font-weight: 700;
+}
+
+/* ---------- Comments section (per-post page) ---------- */
+.markdown-content .comments {
+    border-top: 1px solid var(--background_contrast_2);
+    margin-top: 3em;
+    padding-top: 1.5em;
+}
+
+.markdown-content .comments > h2 {
+    font-size: 22px;
+    text-align: left;
+    padding: 0;
+    margin: 0 0 1em;
+}
+
+.markdown-content .comment-thread,
+.markdown-content .comment-children {
+    list-style: none;
+    padding-left: 0;
+    margin: 0;
+}
+
+.markdown-content .comment-children {
+    padding-left: 1.5em;
+    border-left: 2px solid var(--background_contrast_2);
+    margin-left: 0.5em;
+}
+
+.markdown-content .comment {
+    margin-bottom: 1.25em;
+}
+
+.markdown-content .comment-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    flex-wrap: wrap;
+    font-size: 14px;
+    color: var(--print_secondary_on_web_bg_color);
+}
+
+.markdown-content .comment-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.markdown-content .comment-author {
+    font-weight: 600;
+    color: var(--print_on_web_bg_color);
+}
+
+.markdown-content .comment-author-flag {
+    font-size: 11px;
+    background: var(--background_contrast_1);
+    color: var(--print_secondary_on_web_bg_color);
+    padding: 0.1em 0.45em;
+    border-radius: 3px;
+}
+
+.markdown-content .comment-date {
+    color: var(--print_secondary_on_web_bg_color);
+}
+
+.markdown-content .comment-reactions {
+    color: var(--print_pop);
+}
+
+.markdown-content .comment-body {
+    margin: 0.25em 0 0.5em;
+    text-align: left;
+}
+
+.markdown-content .comment-body p {
+    font-size: 16px;
+    margin: 0 0 0.7em;
+}
+
+.markdown-content .comment-body p:first-child {
+    margin-top: 0;
+}
+
+.markdown-content .comment-body p:last-child {
+    margin-bottom: 0;
 }

@@ -1,5 +1,6 @@
 let sortLikesAscending = false;
 let sortDatesAscending = false;
+let sortCommentsAscending = false;
 let showHTML = true;
 
 function sortEssaysByDate(data) {
@@ -15,13 +16,22 @@ function sortEssaysByLikes(data) {
         ? a.like_count - b.like_count
         : b.like_count - a.like_count);
 }
+
+function sortEssaysByComments(data) {
+    sortCommentsAscending = !sortCommentsAscending;  // Toggle the sort order
+    return data.sort((a, b) => {
+        const ac = a.comment_count || 0;
+        const bc = b.comment_count || 0;
+        return sortCommentsAscending ? ac - bc : bc - ac;
+    });
+}
 function populateEssays(data) {
     const essaysContainer = document.getElementById('essays-container');
     const list = data.map(essay => `
         <li>
             <a href="../${showHTML ? essay.html_link : essay.file_link}" target="_blank">${essay.title}</a>
             <div class="subtitle">${essay.subtitle}</div>
-            <div class="metadata">${essay.like_count} Likes - ${essay.date}</div>
+            <div class="metadata">${essay.like_count} Likes - ${essay.comment_count || 0} Comments - ${essay.date}</div>
         </li>
     `).join('');
     essaysContainer.innerHTML = `<ul>${list}</ul>`;
@@ -45,13 +55,28 @@ document.addEventListener('DOMContentLoaded', () => {
         showHTML = false;  // Default to showing markdown as there won't be any html files in older versions
     }
 
-    document.getElementById('sort-by-date').addEventListener('click', () => {
-        populateEssays(sortEssaysByDate([...essaysData]));
-    });
+    // Guard each sort button so a stale/older HTML template missing one of
+    // them doesn't crash this handler and leave the page blank.
+    const sortByDateBtn = document.getElementById('sort-by-date');
+    if (sortByDateBtn) {
+        sortByDateBtn.addEventListener('click', () => {
+            populateEssays(sortEssaysByDate([...essaysData]));
+        });
+    }
 
-    document.getElementById('sort-by-likes').addEventListener('click', () => {
-        populateEssays(sortEssaysByLikes([...essaysData]));
-    });
+    const sortByLikesBtn = document.getElementById('sort-by-likes');
+    if (sortByLikesBtn) {
+        sortByLikesBtn.addEventListener('click', () => {
+            populateEssays(sortEssaysByLikes([...essaysData]));
+        });
+    }
+
+    const sortByCommentsBtn = document.getElementById('sort-by-comments');
+    if (sortByCommentsBtn) {
+        sortByCommentsBtn.addEventListener('click', () => {
+            populateEssays(sortEssaysByComments([...essaysData]));
+        });
+    }
 
     populateEssays(essaysData);
 });
