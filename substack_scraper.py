@@ -32,7 +32,21 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import SessionNotCreatedException, TimeoutException, WebDriverException
 
-from config import EMAIL, PASSWORD
+try:
+    from config import EMAIL, PASSWORD
+except ImportError:
+    EMAIL = ""
+    PASSWORD = ""
+
+# Environment variables take precedence over config.py, and config.py is no
+# longer required to be present as long as these are set.
+EMAIL = os.environ.get("SUBSTACK_EMAIL", EMAIL)
+PASSWORD = os.environ.get("SUBSTACK_PASSWORD", PASSWORD)
+
+# The values config.py ships with by default; if these are still in effect,
+# nobody has actually configured credentials.
+PLACEHOLDER_EMAIL = "your-email@domain.com"
+PLACEHOLDER_PASSWORD = "your-password"
 
 USE_PREMIUM: bool = True
 BASE_SUBSTACK_URL: str = "https://niallferguson.substack.com/"
@@ -1196,6 +1210,20 @@ class PremiumSubstackScraper(BaseSubstackScraper):
             use_persistent_profile: Reuse browser profile across runs (saves login)
             skip_login: Skip login if using a pre-authenticated profile
         """
+        if not skip_login and (
+            not EMAIL
+            or not PASSWORD
+            or EMAIL == PLACEHOLDER_EMAIL
+            or PASSWORD == PLACEHOLDER_PASSWORD
+        ):
+            raise ValueError(
+                "Premium scraping requires credentials. Set the SUBSTACK_EMAIL "
+                "and SUBSTACK_PASSWORD environment variables, or edit config.py "
+                "with your real Substack email and password. If you've already "
+                "logged in with a persistent browser profile, pass "
+                "--persistent-profile --skip-login instead."
+            )
+
         # Initialize driver before calling super().__init__ since that fetches URLs
         self.driver = BrowserManager.create_driver(
             browser=browser,
