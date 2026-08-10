@@ -43,12 +43,21 @@ cd substack_scraper
 pip install -r requirements.txt
 ```
 
-For the premium scraper, update the `config.py` in the root directory with your Substack email and password:
+For the premium scraper, set your Substack email and password with the `SUBSTACK_EMAIL` and `SUBSTACK_PASSWORD` environment variables:
+
+```bash
+export SUBSTACK_EMAIL="your-email@domain.com"
+export SUBSTACK_PASSWORD="your-password"
+```
+
+Alternatively, update the `config.py` in the root directory with your Substack email and password:
 
 ```python
 EMAIL = "your-email@domain.com"
 PASSWORD = "your-password"
 ```
+
+The environment variables take precedence over `config.py` if both are set.
 
 You'll also need Microsoft Edge installed for the Selenium webdriver.
 
