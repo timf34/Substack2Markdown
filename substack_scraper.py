@@ -52,9 +52,21 @@ def resolve_image_url(url: str) -> str:
 
 
 def clean_linked_images(md_content: str) -> str:
-    """Converts markdown linked images [![alt](img)](link) to ![alt](img)."""
-    pattern = r'\[!\[(.*?)\]\((.*?)\)\]\(.*?\)'
-    return re.sub(pattern, r'![\1](\2)', md_content)
+    """Converts markdown linked images [![alt](img)](link) to ![alt](img).
+
+    Only unwraps links that point back at the image itself or at the
+    Substack CDN (Substack's zoom-view wrappers). Links elsewhere, such as
+    YouTube embed thumbnails linking to the video, are kept intact.
+    """
+    pattern = r'\[!\[(.*?)\]\((.*?)\)\]\((.*?)\)'
+
+    def replace(match):
+        alt, src, target = match.groups()
+        if target == src or target.startswith("https://substackcdn.com/"):
+            return f'![{alt}]({src})'
+        return match.group(0)
+
+    return re.sub(pattern, replace, md_content)
 
 
 def count_images_in_markdown(md_content: str) -> int:
@@ -815,10 +827,39 @@ class BaseSubstackScraper(ABC):
         return [url for url in urls if all(keyword not in url for keyword in keywords)]
 
     @staticmethod
+    def convert_youtube_embeds(html_content: str) -> str:
+        """Replaces Substack YouTube embed wrappers with linked thumbnails.
+
+        html2text drops iframes entirely, so without this the video would
+        vanish from the markdown. The result converts to
+        [![YouTube video](thumbnail)](https://www.youtube.com/watch?v=ID).
+        """
+        if "youtube-wrap" not in html_content:
+            return html_content
+        soup = BeautifulSoup(html_content, "html.parser")
+        for wrap in soup.select("div.youtube-wrap[data-attrs]"):
+            try:
+                video_id = json.loads(wrap["data-attrs"])["videoId"]
+            except (KeyError, TypeError, ValueError):
+                continue
+            if not video_id:
+                continue
+            link = soup.new_tag("a", href=f"https://www.youtube.com/watch?v={video_id}")
+            img = soup.new_tag(
+                "img",
+                src=f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
+                alt="YouTube video",
+            )
+            link.append(img)
+            wrap.replace_with(link)
+        return str(soup)
+
+    @staticmethod
     def html_to_md(html_content: str) -> str:
         """Converts HTML to Markdown."""
         if not isinstance(html_content, str):
             raise ValueError("html_content must be a string")
+        html_content = BaseSubstackScraper.convert_youtube_embeds(html_content)
         h = html2text.HTML2Text()
         h.ignore_links = False
         h.body_width = 0

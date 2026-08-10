@@ -294,3 +294,44 @@ def test_get_credentials_empty_when_unconfigured(monkeypatch):
     monkeypatch.delenv("SUBSTACK_PASSWORD", raising=False)
 
     assert ss.get_credentials() == ("", "")
+
+
+# 11. YouTube embeds (issue #25)
+YOUTUBE_EMBED_HTML = (
+    '<div class="available-content"><p>Intro</p>'
+    '<div id="youtube2-9FDgRXPSv3U" data-attrs="{&quot;videoId&quot;:&quot;9FDgRXPSv3U&quot;,'
+    '&quot;startTime&quot;:null,&quot;endTime&quot;:null}" data-component-name="Youtube2ToDOM" '
+    'class="youtube-wrap"><div class="youtube-inner">'
+    '<iframe src="https://www.youtube-nocookie.com/embed/9FDgRXPSv3U?rel=0" frameborder="0">'
+    '</iframe></div></div><p>Outro</p></div>'
+)
+
+
+def test_youtube_embed_exported_as_linked_thumbnail():
+    md = ss.BaseSubstackScraper.html_to_md(YOUTUBE_EMBED_HTML)
+
+    assert (
+        "[![YouTube video](https://img.youtube.com/vi/9FDgRXPSv3U/hqdefault.jpg)]"
+        "(https://www.youtube.com/watch?v=9FDgRXPSv3U)" in md
+    )
+    assert "Intro" in md and "Outro" in md
+
+
+def test_youtube_embed_with_malformed_attrs_is_skipped():
+    html = (
+        '<div class="youtube-wrap" data-attrs="not-json"><iframe src="x"></iframe></div>'
+        "<p>Body</p>"
+    )
+
+    md = ss.BaseSubstackScraper.html_to_md(html)
+
+    assert "Body" in md
+
+
+def test_clean_linked_images_preserves_youtube_thumbnail_links():
+    md = (
+        "[![YouTube video](https://img.youtube.com/vi/abc/hqdefault.jpg)]"
+        "(https://www.youtube.com/watch?v=abc)"
+    )
+
+    assert ss.clean_linked_images(md) == md
