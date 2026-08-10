@@ -43,11 +43,6 @@ except ImportError:
 EMAIL = os.environ.get("SUBSTACK_EMAIL", EMAIL)
 PASSWORD = os.environ.get("SUBSTACK_PASSWORD", PASSWORD)
 
-# The values config.py ships with by default; if these are still in effect,
-# nobody has actually configured credentials.
-PLACEHOLDER_EMAIL = "your-email@domain.com"
-PLACEHOLDER_PASSWORD = "your-password"
-
 USE_PREMIUM: bool = True
 BASE_SUBSTACK_URL: str = "https://niallferguson.substack.com/"
 BASE_MD_DIR: str = "substack_md_files"
@@ -1210,12 +1205,7 @@ class PremiumSubstackScraper(BaseSubstackScraper):
             use_persistent_profile: Reuse browser profile across runs (saves login)
             skip_login: Skip login if using a pre-authenticated profile
         """
-        if not skip_login and (
-            not EMAIL
-            or not PASSWORD
-            or EMAIL == PLACEHOLDER_EMAIL
-            or PASSWORD == PLACEHOLDER_PASSWORD
-        ):
+        if not skip_login and not (EMAIL and PASSWORD):
             raise ValueError(
                 "Premium scraping requires credentials. Set the SUBSTACK_EMAIL "
                 "and SUBSTACK_PASSWORD environment variables, or edit config.py "
