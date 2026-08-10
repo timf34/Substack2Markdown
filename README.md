@@ -50,14 +50,14 @@ export SUBSTACK_EMAIL="your-email@domain.com"
 export SUBSTACK_PASSWORD="your-password"
 ```
 
-Alternatively, update the `config.py` in the root directory with your Substack email and password:
+Alternatively, create a file named `config.py` in the root of the project containing exactly these two lines (with your own details filled in):
 
 ```python
 EMAIL = "your-email@domain.com"
 PASSWORD = "your-password"
 ```
 
-The environment variables take precedence over `config.py` if both are set.
+`config.py` is gitignored, so your credentials will never be committed. The environment variables take precedence over `config.py` if both are set.
 
 You'll also need Microsoft Edge installed for the Selenium webdriver.
 

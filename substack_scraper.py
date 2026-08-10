@@ -32,17 +32,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import SessionNotCreatedException, TimeoutException, WebDriverException
 
-try:
-    from config import EMAIL, PASSWORD
-except ImportError:
-    EMAIL = ""
-    PASSWORD = ""
-
-# Environment variables take precedence over config.py, and config.py is no
-# longer required to be present as long as these are set.
-EMAIL = os.environ.get("SUBSTACK_EMAIL", EMAIL)
-PASSWORD = os.environ.get("SUBSTACK_PASSWORD", PASSWORD)
-
 USE_PREMIUM: bool = True
 BASE_SUBSTACK_URL: str = "https://niallferguson.substack.com/"
 BASE_MD_DIR: str = "substack_md_files"
@@ -1178,6 +1167,23 @@ class SubstackScraper(BaseSubstackScraper):
 # PREMIUM CONTENT SCRAPER
 # =============================================================================
 
+def get_credentials() -> Tuple[str, str]:
+    """Substack login credentials for premium scraping.
+
+    The SUBSTACK_EMAIL and SUBSTACK_PASSWORD environment variables take
+    precedence over an optional config.py in the project root containing
+    EMAIL and PASSWORD strings.
+    """
+    try:
+        from config import EMAIL, PASSWORD
+    except ImportError:
+        EMAIL, PASSWORD = "", ""
+    return (
+        os.environ.get("SUBSTACK_EMAIL", EMAIL),
+        os.environ.get("SUBSTACK_PASSWORD", PASSWORD),
+    )
+
+
 class PremiumSubstackScraper(BaseSubstackScraper):
     def __init__(
         self,
@@ -1209,13 +1215,16 @@ class PremiumSubstackScraper(BaseSubstackScraper):
             use_persistent_profile: Reuse browser profile across runs (saves login)
             skip_login: Skip login if using a pre-authenticated profile
         """
-        if not skip_login and not (EMAIL and PASSWORD):
+        self.email, self.password = get_credentials()
+        if not skip_login and not (self.email and self.password):
             raise ValueError(
                 "Premium scraping requires credentials. Set the SUBSTACK_EMAIL "
-                "and SUBSTACK_PASSWORD environment variables, or edit config.py "
-                "with your real Substack email and password. If you've already "
-                "logged in with a persistent browser profile, pass "
-                "--persistent-profile --skip-login instead."
+                "and SUBSTACK_PASSWORD environment variables, or create a "
+                "config.py in the project root containing your Substack login:\n"
+                '    EMAIL = "your-email@domain.com"\n'
+                '    PASSWORD = "your-password"\n'
+                "If you've already logged in with a persistent browser profile, "
+                "pass --persistent-profile --skip-login instead."
             )
 
         # Initialize driver before calling super().__init__ since that fetches URLs
@@ -1257,8 +1266,8 @@ class PremiumSubstackScraper(BaseSubstackScraper):
 
         email = self.driver.find_element(By.NAME, "email")
         password = self.driver.find_element(By.NAME, "password")
-        email.send_keys(EMAIL)
-        password.send_keys(PASSWORD)
+        email.send_keys(self.email)
+        password.send_keys(self.password)
 
         submit = self.driver.find_element(By.XPATH, "//*[@id=\"substack-login\"]/div[2]/div[2]/form/button")
         submit.click()
