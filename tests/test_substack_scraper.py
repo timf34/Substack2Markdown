@@ -228,3 +228,35 @@ def test_scraper_initialization(tmp_path):
     assert scraper.writer_name == "example"
     assert os.path.isdir(os.path.join(md_dir, "example"))
     assert os.path.isdir(os.path.join(html_dir, "example"))
+
+# 9. test_mdx_frontmatter_includes_source_url
+def test_mdx_frontmatter_includes_source_url():
+    """Verify the post URL is emitted as source_url in mdx frontmatter."""
+    result = ss.BaseSubstackScraper.combine_metadata_and_content(
+        "Title",
+        "Subtitle",
+        "2024-01-01",
+        "Author",
+        "",
+        "5",
+        "Body",
+        frontmatter_format="mdx",
+        source_url="https://example.substack.com/p/test-post",
+    )
+
+    assert 'source_url: "https://example.substack.com/p/test-post"' in result
+    assert result.index('author: "Author"') < result.index("source_url:")
+
+    # Legacy format is unchanged and never includes source_url
+    legacy = ss.BaseSubstackScraper.combine_metadata_and_content(
+        "Title",
+        "Subtitle",
+        "2024-01-01",
+        "Author",
+        "",
+        "5",
+        "Body",
+        frontmatter_format="legacy",
+        source_url="https://example.substack.com/p/test-post",
+    )
+    assert "source_url" not in legacy

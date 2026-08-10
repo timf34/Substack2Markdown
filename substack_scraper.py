@@ -905,6 +905,7 @@ class BaseSubstackScraper(ABC):
         like_count: str,
         content: str,
         frontmatter_format: str = "legacy",
+        source_url: str = "",
     ) -> str:
         """Combines metadata and content using the selected frontmatter format.
 
@@ -912,6 +913,7 @@ class BaseSubstackScraper(ABC):
             date: ISO date string (``YYYY-MM-DD``) or the literal ``"Date not found"``.
             frontmatter_format: ``"mdx"`` for YAML frontmatter, ``"legacy"`` for the
                 original ``# title`` / ``**date**`` / ``**Likes:** N`` header.
+            source_url: the post's original Substack URL, included in mdx frontmatter.
         """
         if not isinstance(title, str):
             raise ValueError("title must be a string")
@@ -929,6 +931,8 @@ class BaseSubstackScraper(ABC):
                 frontmatter += f'subtitle: "{safe_subtitle}"\n'
             frontmatter += f'date: "{date}"\n'
             frontmatter += f'author: "{safe_author}"\n'
+            if source_url:
+                frontmatter += f'source_url: "{source_url}"\n'
             if cover_image:
                 frontmatter += f'image: "{cover_image}"\n'
             frontmatter += '---\n\n'
@@ -1030,7 +1034,7 @@ class BaseSubstackScraper(ABC):
                 print(f"  failed to dump debug HTML: {dump_err}")
 
         md_content = self.combine_metadata_and_content(
-            title, subtitle, date, author, cover_image, like_count, md, self.frontmatter_format
+            title, subtitle, date, author, cover_image, like_count, md, self.frontmatter_format, url
         )
 
         return title, subtitle, author, date, cover_image, like_count, md_content
