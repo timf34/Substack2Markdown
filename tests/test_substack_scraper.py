@@ -335,3 +335,12 @@ def test_clean_linked_images_preserves_youtube_thumbnail_links():
     )
 
     assert ss.clean_linked_images(md) == md
+
+
+def test_resolve_image_url_unwraps_http_original():
+    cdn_url = (
+        "https://substackcdn.com/image/fetch/w_1456,c_limit,f_auto,q_auto:good,"
+        "fl_progressive:steep/http%3A%2F%2Fexample.com%2Fphoto.jpg"
+    )
+
+    assert ss.resolve_image_url(cdn_url) == "http://example.com/photo.jpg"

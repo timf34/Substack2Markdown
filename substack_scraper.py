@@ -45,9 +45,10 @@ NUM_POSTS_TO_SCRAPE: int = 0
 def resolve_image_url(url: str) -> str:
     """Get the original image URL from a Substack CDN URL."""
     if url.startswith("https://substackcdn.com/image/fetch/"):
-        parts = url.split("/https%3A%2F%2F")
-        if len(parts) > 1:
-            url = "https://" + unquote(parts[1])
+        for marker, scheme in (("/https%3A%2F%2F", "https://"), ("/http%3A%2F%2F", "http://")):
+            parts = url.split(marker)
+            if len(parts) > 1:
+                return scheme + unquote(parts[1])
     return url
 
 
